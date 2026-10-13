@@ -51,9 +51,16 @@
   .toolbar button { background: transparent; color: var(--text); border: 1px solid var(--line); padding: 4px 8px; font-size: 13px; border-radius: 7px; }
   .toolbar button:disabled { opacity: .35; filter: none; }
   #saved { position: absolute; right: 0; top: -18px; color: var(--muted); font-size: 11px; transition: opacity .4s; }
-  #help { position: fixed; inset: 0; background: rgba(8, 9, 12, .7); display: grid; place-items: center; z-index: 10; }
-  #help > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; width: min(440px, calc(100vw - 32px)); }
-  #help h2 { margin: 0 0 12px; font-size: 17px; }
+  .toolbar .mcp { border-color: var(--lime); color: var(--lime); font-weight: 600; }
+  .modal p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+  .modal p strong { color: var(--text); font-weight: 500; }
+  .modal code, .modal pre { font: 12px/1.5 "JetBrains Mono", monospace; color: var(--text); }
+  .modal pre { background: #0f1115; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; white-space: pre-wrap; word-break: break-all; }
+  .modal .cta { background: rgba(205, 235, 18, .08); border: 1px solid rgba(205, 235, 18, .35); border-radius: 10px; padding: 10px 12px; color: var(--text); }
+  .modal .close { margin-top: 6px; width: 100%; }
+  #help, #mcpInfo { position: fixed; inset: 0; background: rgba(8, 9, 12, .7); display: grid; place-items: center; z-index: 10; }
+  #help > div, #mcpInfo > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; width: min(440px, calc(100vw - 32px)); }
+  #help h2, #mcpInfo h2 { margin: 0 0 12px; font-size: 17px; }
   #help dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; margin: 0; font-size: 13px; }
   #help dt { text-align: right; }
   #help dd { margin: 0; color: var(--muted); }
@@ -179,6 +186,7 @@
       <button id="undo" title="Zpět" aria-label="Zpět">↶</button>
       <button id="redo" title="Vpřed" aria-label="Vpřed">↷</button>
       <button id="newDoc" title="Nový plakát">nový</button>
+      <button id="mcpBtn" class="mcp" title="Napojení do Claude (MCP)">MCP</button>
       <button id="helpBtn" title="Klávesové zkratky (?)" aria-label="Klávesové zkratky">?</button>
     </div>
   </div>
@@ -365,6 +373,21 @@
   <div>
     <h2 id="helpTitle">Klávesové zkratky</h2>
     <dl id="helpList"></dl>
+  </div>
+</div>
+
+<div id="mcpInfo" class="hidden modal" role="dialog" aria-modal="true" aria-labelledby="mcpTitle">
+  <div>
+    <h2 id="mcpTitle">Generátor v Claude (MCP)</h2>
+    <p>Generátor má MCP server, takže ho může používat přímo <strong>Claude</strong>. Stačí mu napsat třeba
+      „udělej plakát pro tenhle soubor, formát 4:5, víc limetky a nadpis HACK THE FLOW“ a vrátí hotový obrázek i odkaz sem do editoru.</p>
+    <p>Adresa serveru:</p>
+    <pre id="mcpUrl">https://boldnewera-mcp.danielhromadka1.workers.dev/mcp</pre>
+    <p class="cta">🔑 Server je chráněný tokenem. <strong>Chceš ho napojit do Claude? Napiš mi o token na Slacku – Daniel Hromádka.</strong></p>
+    <p style="margin-top:12px">Claude Code:</p>
+    <pre>claude mcp add --transport http boldnewera https://boldnewera-mcp.danielhromadka1.workers.dev/mcp --header "Authorization: Bearer &lt;token&gt;"</pre>
+    <p>claude.ai: Settings → Connectors → Add custom connector → URL<br><code>https://boldnewera-mcp.danielhromadka1.workers.dev/mcp/&lt;token&gt;</code></p>
+    <button id="mcpClose" class="ghost close">Zavřít</button>
   </div>
 </div>
 
@@ -1296,6 +1319,10 @@ $('undo').title = `Zpět (${MOD}Z)`;
 $('redo').title = `Vpřed (⇧${MOD}Z)`;
 const toggleHelp = show => $('help').classList.toggle('hidden', !(show ?? $('help').classList.contains('hidden')));
 $('helpBtn').addEventListener('click', () => toggleHelp(true));
+const toggleMcp = show => $('mcpInfo').classList.toggle('hidden', !show);
+$('mcpBtn').addEventListener('click', () => toggleMcp(true));
+$('mcpClose').addEventListener('click', () => toggleMcp(false));
+$('mcpInfo').addEventListener('click', e => { if (e.target === $('mcpInfo')) toggleMcp(false); });
 $('help').addEventListener('click', e => { if (e.target === $('help')) toggleHelp(false); });
 
 document.addEventListener('keydown', e => {
@@ -1311,6 +1338,7 @@ document.addEventListener('keydown', e => {
   if (mod && e.shiftKey && key === 'c') { e.preventDefault(); $('share').click(); return; }
   if (e.key === 'Escape') {
     if (!$('help').classList.contains('hidden')) toggleHelp(false);
+    else if (!$('mcpInfo').classList.contains('hidden')) toggleMcp(false);
     else if (typing) el.blur();
     else selectLayer(-1);
     return;
