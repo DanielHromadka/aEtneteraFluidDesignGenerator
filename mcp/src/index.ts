@@ -20,15 +20,29 @@ const inputSchema = z.object({
 	text: z.string().optional().describe("Text whose SHA-256 seeds the poster. Same text = same poster."),
 	file_base64: z.string().optional().describe("File content as base64; its SHA-256 seeds the poster."),
 	sha256: z.string().regex(/^[0-9a-fA-F]{64}$/).optional().describe("Use this SHA-256 directly."),
-	layout: z.enum(["vertical", "stacked", "minimal", "auto"]).default("vertical")
-		.describe("vertical = brand name rotated 90°, stacked = big headline + brand, minimal = background only, auto = picked by hash"),
+	layout: z.enum(["vertical", "stacked", "minimal", "auto", "empty"]).default("vertical")
+		.describe("Text template: vertical = 'etnetera' rotated 90° + & + claim, stacked = big headline + brand + logo, " +
+			"minimal = & + claim only, auto = picked by hash, empty = no template texts"),
 	format: z.enum(["2:3", "3:4", "4:5", "1:1", "9:16", "16:9"]).default("2:3"),
-	headline: z.string().optional().describe("Headline for the stacked layout; use \\n for line breaks. Default 'new\\nera'."),
-	tagline: z.string().optional().describe("Claim in the bottom-right corner. Default 'Be Bold.'"),
-	font: z.enum(FONTS).optional(),
-	text_color: z.union([z.enum(["auto", "accent", "white", "dark"]), hexColor]).optional()
-		.describe("auto/accent/white/dark or a hex colour"),
-	text_size: z.number().min(0.4).max(1.8).optional().describe("Text scale, 1 = default"),
+	headline: z.string().optional().describe("Headline for the stacked template; use \\n for line breaks. Default 'new\\nera'."),
+	tagline: z.string().optional().describe("Claim used by the templates. Default 'Be Bold.'"),
+	texts: z.array(z.object({
+		text: z.string().describe("Text, \\n for line breaks"),
+		x: z.number().min(-0.5).max(1.5).default(0.5).describe("Anchor x as a fraction of poster width (0 left, 1 right)"),
+		y: z.number().min(-0.5).max(1.5).default(0.5).describe("Anchor y (vertical centre of the text block) as a fraction of poster height (0 top)"),
+		rotation: z.number().min(-360).max(360).default(0).describe("Degrees, -90 = reads bottom-to-top"),
+		size: z.number().min(0.005).max(1).default(0.08).describe("Font size as a fraction of the poster width on 2:3 (0.24 = huge, 0.03 = small print)"),
+		font: z.enum(FONTS).default("Outfit"),
+		weight: z.union([z.literal(300), z.literal(400), z.literal(500), z.literal(700)]).default(500),
+		color: z.union([z.literal("accent"), hexColor]).default("#eef0e8").describe("Hex colour or 'accent' (follows the palette accent)"),
+		align: z.enum(["left", "center", "right"]).default("center").describe("Horizontal alignment relative to x"),
+		tracking: z.number().min(-0.2).max(1).default(0).describe("Letter spacing in em"),
+		line_height: z.number().min(0.5).max(3).default(1),
+		opacity: z.number().min(0).max(1).default(1),
+		shadow: z.boolean().default(false).describe("Soft dark glow behind the text for readability"),
+	})).optional().describe("Free text layers with position, rotation, size, font and colour"),
+	texts_mode: z.enum(["append", "replace"]).default("append")
+		.describe("append = add texts on top of the template texts, replace = only these texts"),
 	colors: z.object({
 		accent: hexColor.optional().describe("Main ribbon colour (default lime)"),
 		secondary: hexColor.optional().describe("Glossy secondary colour (default lavender)"),
@@ -95,12 +109,14 @@ async function buildUrl(env: Env, a: Input): Promise<{ url: string; seedInfo: st
 	q.set("format", a.format);
 	if (a.headline !== undefined) q.set("headline", a.headline);
 	if (a.tagline !== undefined) q.set("tagline", a.tagline);
-	if (a.font) q.set("font", a.font);
-	if (a.text_color) {
-		if (a.text_color.match(/^#?[0-9a-fA-F]{6}$/)) q.set("textHex", a.text_color.replace("#", ""));
-		else q.set("textColor", a.text_color);
+	if (a.texts?.length) {
+		const layers = a.texts.map(t => ({
+			text: t.text, x: t.x, y: t.y, rot: t.rotation, size: t.size, font: t.font, weight: t.weight,
+			color: t.color === "accent" ? "accent" : `#${t.color.replace("#", "")}`.toLowerCase(),
+			align: t.align, tracking: t.tracking, lh: t.line_height, opacity: t.opacity, shadow: t.shadow,
+		}));
+		q.set(a.texts_mode === "replace" ? "layers" : "addLayers", JSON.stringify(layers));
 	}
-	if (a.text_size !== undefined) q.set("textSize", String(a.text_size));
 	if (a.colors?.accent) q.set("cAccent", a.colors.accent.replace("#", ""));
 	if (a.colors?.secondary) q.set("cSecond", a.colors.secondary.replace("#", ""));
 	if (a.colors?.dark) q.set("cDark", a.colors.dark.replace("#", ""));

@@ -114,6 +114,28 @@
   .swatch.changed { color: var(--text); }
   .swatch.changed::after { content: "•"; color: var(--lime); margin-top: -4px; }
   .hidden { display: none !important; }
+  .tune .row button { margin-top: 0; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; background: #0f1115; border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button { background: transparent; color: var(--muted); padding: 8px; border-radius: 7px; font-weight: 500; }
+  .seg button[aria-selected="true"] { background: var(--lime); color: #15170c; font-weight: 600; }
+  .tune .row.actions { gap: 6px; }
+  .tune .row.actions button { padding: 7px 4px; font-size: 12px; }
+  .layers { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+  .layer-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    background: #0f1115; border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 10px; font: 500 13px "Outfit", sans-serif; text-align: left;
+  }
+  .layer-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .layer-item small { color: var(--muted); font-weight: 400; flex-shrink: 0; }
+  .layer-item.sel { border-color: var(--lime); }
+  .tune .layers button { margin-top: 0; }
+  #layerEditor { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--line); display: flex; flex-direction: column; gap: 10px; }
+  #layerEditor .row { margin-top: 0; }
+  #layerEditor .check { margin-top: 24px; }
+  .rotq { display: flex; gap: 6px; margin-top: 6px; }
+  .tune .rotq button { margin-top: 0; padding: 5px; font-size: 12px; }
+  #poster { touch-action: none; }
   details pre { font: 11px/1.5 "JetBrains Mono", monospace; white-space: pre-wrap; margin: 8px 0 0; }
   main {
     display: grid;
@@ -139,15 +161,20 @@
 <aside>
   <h1>fluid<span>/</span>poster</h1>
 
-  <div id="drop" tabindex="0">
+  <div class="seg" role="tablist" aria-label="zdroj hashe">
+    <button id="srcFile" role="tab" aria-selected="false">Soubor</button>
+    <button id="srcText" role="tab" aria-selected="true">Text</button>
+  </div>
+
+  <div id="drop" tabindex="0" class="hidden">
     <strong>Přetáhni soubor sem</strong>
     <small>nebo klikni a vyber</small>
     <div id="fileName"></div>
     <input id="file" type="file" hidden>
   </div>
 
-  <div>
-    <label for="seedText">…nebo hashuj text</label>
+  <div id="textSrc">
+    <label for="seedText">text k zahashování</label>
     <input id="seedText" type="text" placeholder="libovolný text" value="etnetera">
   </div>
 
@@ -156,50 +183,40 @@
     <div class="hash" id="hashOut">—</div>
   </div>
 
-  <div>
-    <label for="layout">layout</label>
-    <select id="layout">
-      <option value="vertical" selected>vertical</option>
-      <option value="stacked">stacked</option>
-      <option value="minimal">minimal</option>
-      <option value="auto">auto (z hashe)</option>
-    </select>
-  </div>
-
-  <div>
-    <label for="headline">headline (stacked)</label>
-    <textarea id="headline">new
-era</textarea>
-  </div>
-  <div>
-    <label for="tagline">claim</label>
-    <input id="tagline" type="text" value="Be Bold.">
-  </div>
-
   <label class="check"><input id="showHash" type="checkbox"> otisk hashe na plakátu</label>
   <label class="check"><input id="animate" type="checkbox"> animovat proudění</label>
 
   <details class="tune" open>
-    <summary>Úpravy</summary>
+    <summary>Texty</summary>
     <div class="row">
       <div>
-        <label for="format">formát</label>
-        <select id="format">
-          <option value="2:3">2:3 plakát</option>
-          <option value="3:4">3:4</option>
-          <option value="4:5">4:5 Instagram</option>
-          <option value="1:1">1:1</option>
-          <option value="9:16">9:16 story</option>
-          <option value="16:9">16:9 slide</option>
+        <label for="layout">šablona</label>
+        <select id="layout">
+          <option value="vertical" selected>vertical</option>
+          <option value="stacked">stacked</option>
+          <option value="minimal">minimal</option>
+          <option value="auto">auto (z hashe)</option>
+          <option value="empty">prázdná</option>
         </select>
       </div>
     </div>
-
-    <div id="textBox">
+    <div id="layerList" class="layers"></div>
+    <div class="row actions" style="margin-top:8px">
+      <button id="addLayer" class="ghost" title="Přidat text">+ text</button>
+      <button id="dupLayer" class="ghost" title="Duplikovat">kopie</button>
+      <button id="upLayer" class="ghost" title="Posunout dopředu">↑</button>
+      <button id="downLayer" class="ghost" title="Posunout dozadu">↓</button>
+      <button id="delLayer" class="ghost" title="Smazat">smazat</button>
+    </div>
+    <div id="layerEditor" class="hidden">
+      <div>
+        <label for="lText">text</label>
+        <textarea id="lText" rows="2"></textarea>
+      </div>
       <div class="row">
         <div>
-          <label for="font">font</label>
-          <select id="font">
+          <label for="lFont">font</label>
+          <select id="lFont">
             <option>Outfit</option>
             <option>Space Grotesk</option>
             <option>Inter Tight</option>
@@ -216,18 +233,61 @@ era</textarea>
           </select>
         </div>
         <div>
-          <label for="textColor">barva textu</label>
-          <select id="textColor">
-            <option value="auto">auto</option>
-            <option value="accent">akcent pozadí</option>
-            <option value="white">bílá</option>
-            <option value="dark">tmavá</option>
-            <option value="custom">vlastní…</option>
+          <label for="lWeight">řez</label>
+          <select id="lWeight">
+            <option value="300">light</option>
+            <option value="400">regular</option>
+            <option value="500">medium</option>
+            <option value="700">bold</option>
           </select>
         </div>
       </div>
-      <div class="swatches" id="textHexBox">
-        <label class="swatch">vlastní barva textu<input id="textHex" type="color" value="#ffffff"></label>
+      <div class="row">
+        <div>
+          <label for="lColor">barva</label>
+          <input id="lColor" type="color">
+        </div>
+        <div>
+          <label class="check"><input id="lAccent" type="checkbox"> barva akcentu</label>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="lAlign">zarovnání</label>
+          <select id="lAlign">
+            <option value="left">vlevo</option>
+            <option value="center">na střed</option>
+            <option value="right">vpravo</option>
+          </select>
+        </div>
+        <div>
+          <label class="check"><input id="lShadow" type="checkbox"> stín</label>
+        </div>
+      </div>
+      <div id="layerSliders"></div>
+      <div class="rotq">
+        <button class="ghost" data-rot="-90">−90°</button>
+        <button class="ghost" data-rot="0">0°</button>
+        <button class="ghost" data-rot="90">90°</button>
+        <button class="ghost" data-center="x">na střed ↔</button>
+        <button class="ghost" data-center="y">na střed ↕</button>
+      </div>
+    </div>
+  </details>
+
+  <details class="tune" open>
+    <summary>Pozadí</summary>
+    <div class="row">
+      <div>
+        <label for="format">formát</label>
+        <select id="format">
+          <option value="2:3">2:3 plakát</option>
+          <option value="3:4">3:4</option>
+          <option value="4:5">4:5 Instagram</option>
+          <option value="1:1">1:1</option>
+          <option value="9:16">9:16 story</option>
+          <option value="16:9">16:9 slide</option>
+        </select>
       </div>
     </div>
 
@@ -457,7 +517,6 @@ function paramsFromHash(bytes) {
     lightDeg: u(27) * 360,
     variation: 0,
     speed: 1,
-    textSize: 1,
     limeHi: hex('#f0ff8a'),
     darkC: lerp3(hex('#1c1f28'), hex('#262a36'), u(29)),
     slate: lerp3(hex('#3a3f58'), hex('#4b4f70'), u(30)),
@@ -467,8 +526,6 @@ function paramsFromHash(bytes) {
 
 // ---------- manual controls ----------
 const SLIDERS = [
-  { group: 'text', box: 'textBox' },
-  { key: 'textSize', label: 'velikost textu', min: 0.4, max: 1.8, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
   { group: 'tvar' },
   { key: 'variation', label: 'variace', min: 0, max: 100, step: 1, fmt: v => v },
   { key: 'scale', label: 'zoom', min: 0.4, max: 2.6, step: 0.01, fmt: v => v.toFixed(2) },
@@ -498,7 +555,6 @@ function syncColors() {
   $('cSecond').value = toHex(P.lav);
   $('cDark').value = toHex(P.darkC);
   for (const el of document.querySelectorAll('.swatch[data-c]')) el.classList.toggle('changed', !!COLORS[el.dataset.c]);
-  $('textHexBox').classList.toggle('hidden', $('textColor').value !== 'custom');
 }
 
 function buildSliders() {
@@ -628,110 +684,153 @@ function renderGL(w, h, t) {
 const $ = id => document.getElementById(id);
 const BRAND = 'etnetera';
 const LIME = '#d4f21a', WHITE = '#eef0e8', DARK = '#1c1f28';
+const FONTS = ["Outfit", "Space Grotesk", "Inter Tight", "Manrope", "Sora", "DM Sans", "Archivo", "Bricolage Grotesque", "Unbounded", "Syne", "Montserrat", "Playfair Display", "JetBrains Mono"];
 
-const font = (weight, px) => `${weight} ${px}px "${$('font').value}", Outfit, sans-serif`;
+// ---------- text layers ----------
+// x, y: anchor position as a fraction of the poster; size: fraction of the
+// poster's short "unit" side; rot in degrees; color = hex or 'accent'.
+let LAYERS = [], selected = -1, layersEdited = false;
 
-function fitFont(c, text, weight, maxW, startPx) {
-  let px = startPx;
-  c.font = font(weight, px);
-  const w = c.measureText(text).width;
-  if (w > maxW) px *= maxW / w;
-  c.font = font(weight, px);
-  return px;
+function makeLayer(o = {}) {
+  return {
+    text: 'text', x: 0.5, y: 0.5, rot: 0, size: 0.08, font: 'Outfit', weight: 500, color: WHITE,
+    align: 'center', tracking: 0, lh: 1, opacity: 1, shadow: false, ...o,
+  };
 }
 
-function drawTypography(c, W, H) {
-  const layout = $('layout').value === 'auto' ? P.layout : $('layout').value;
-  const brand = BRAND;
-  const tagline = $('tagline').value.trim();
-  // size unit that works for any aspect ratio (equals W on a 2:3 poster)
+function sanitizeLayer(o) {
+  const L = makeLayer();
+  const num = (k, lo, hi) => { if (Number.isFinite(+o[k])) L[k] = Math.min(hi, Math.max(lo, +o[k])); };
+  if (typeof o.text === 'string') L.text = o.text.slice(0, 400);
+  num('x', -0.5, 1.5); num('y', -0.5, 1.5); num('rot', -360, 360); num('size', 0.005, 1);
+  num('tracking', -0.2, 1); num('lh', 0.5, 3); num('opacity', 0, 1);
+  if ([300, 400, 500, 700].includes(+o.weight)) L.weight = +o.weight;
+  if (FONTS.includes(o.font)) L.font = o.font;
+  if (['left', 'center', 'right'].includes(o.align)) L.align = o.align;
+  if (o.color === 'accent' || /^#[0-9a-f]{6}$/i.test(o.color || '')) L.color = o.color;
+  L.shadow = !!o.shadow;
+  return L;
+}
+
+function templateLayers(name, headline = 'new\nera', tagline = 'Be Bold.') {
+  if (name === 'auto') name = BASE ? BASE.layout : 'vertical';
+  if (name === 'empty') return [];
+  const corner = [
+    makeLayer({ text: '&', x: 0.065, y: 0.93, size: 0.06, align: 'left', color: 'accent' }),
+    makeLayer({ text: tagline, x: 0.935, y: 0.932, size: 0.026, weight: 700, align: 'right', color: 'accent' }),
+  ];
+  if (name === 'vertical') {
+    return [makeLayer({ text: BRAND, x: 0.56, y: 0.5, rot: -90, size: 0.24, color: 'accent', shadow: true }), ...corner];
+  }
+  if (name === 'stacked') {
+    return [
+      makeLayer({ text: headline, x: 0.15, y: 0.37, size: 0.24, weight: 700, align: 'left', tracking: -0.03, lh: 0.86 }),
+      makeLayer({ text: BRAND, x: 0.155, y: 0.565, size: 0.12, weight: 300, align: 'left' }),
+      makeLayer({ text: '& ' + BRAND, x: 0.5, y: 0.93, size: 0.038 }),
+    ];
+  }
+  return corner;
+}
+
+const layerColor = L => (L.color === 'accent' ? COLORS.accent || LIME : L.color);
+
+function layerMetrics(c, L, W, H) {
   const S = Math.min(W, H / 1.5);
-  const ts = P.textSize;
-  const m = S * 0.065;
-  const accentText = COLORS.accent || LIME;
-  const pick = { accent: accentText, white: WHITE, dark: DARK, custom: $('textHex').value }[$('textColor').value];
-  const main = pick || (layout === 'stacked' ? WHITE : accentText);
-  const accent = pick || accentText;
-  c.textBaseline = 'alphabetic';
+  const px = L.size * S;
+  c.font = `${L.weight} ${px}px "${L.font}", Outfit, sans-serif`;
+  c.letterSpacing = `${L.tracking * px}px`;
+  const lines = String(L.text).split('\n');
+  const lineH = px * L.lh;
+  const w = Math.max(0, ...lines.map(l => c.measureText(l).width));
+  const h = lineH * lines.length;
+  const x0 = L.align === 'left' ? 0 : L.align === 'right' ? -w : -w / 2;
+  c.letterSpacing = '0px';
+  return { px, lines, lineH, w, h, x0 };
+}
 
-  if (layout === 'vertical') {
-    c.save();
-    c.fillStyle = main;
-    const px = fitFont(c, brand, 500, H * 0.66 * ts, S * 0.24 * ts);
-    c.translate(W * 0.47 + px * 0.36, H / 2 + Math.min(H * 0.36, c.measureText(brand).width / 2));
-    c.rotate(-Math.PI / 2);
-    if (main !== DARK && $('textColor').value !== 'custom') { c.shadowColor = 'rgba(20, 22, 30, 0.45)'; c.shadowBlur = px * 0.25; }
-    c.fillText(brand, 0, 0);
-    c.restore();
-  }
+function drawLayer(c, L, W, H) {
+  const m = layerMetrics(c, L, W, H);
+  c.save();
+  c.translate(L.x * W, L.y * H);
+  c.rotate(L.rot * Math.PI / 180);
+  c.font = `${L.weight} ${m.px}px "${L.font}", Outfit, sans-serif`;
+  c.letterSpacing = `${L.tracking * m.px}px`;
+  c.globalAlpha = L.opacity;
+  c.fillStyle = layerColor(L);
+  c.textAlign = L.align;
+  c.textBaseline = 'middle';
+  if (L.shadow) { c.shadowColor = 'rgba(20, 22, 30, 0.45)'; c.shadowBlur = m.px * 0.25; }
+  m.lines.forEach((l, i) => c.fillText(l, 0, -m.h / 2 + (i + 0.5) * m.lineH));
+  c.restore();
+}
 
-  if (layout === 'stacked') {
-    const lines = $('headline').value.split('\n').map(s => s.trim()).filter(Boolean);
-    c.fillStyle = main;
-    let px = S * 0.24 * ts;
-    c.font = font(700, px);
-    const widest = Math.max(1, ...lines.map(l => c.measureText(l).width));
-    if (widest > W * 0.72) px *= (W * 0.72) / widest;
-    c.font = font(700, px);
-    c.letterSpacing = `${-px * 0.03}px`;
-    const x = Math.max(W * 0.15, (W - widest * px / (S * 0.24 * ts)) / 2 - W * 0.1 * (W > H));
-    let y = H * 0.42 - (lines.length - 2) * px * 0.42;
-    for (const l of lines) { c.fillText(l, x, y); y += px * 0.86; }
-    c.letterSpacing = '0px';
-    if (brand) {
-      fitFont(c, brand, 300, W * 0.72, px * 0.5);
-      c.fillText(brand, x + px * 0.02, y + px * 0.02);
-    }
-  }
+function drawSelection(c, W, H) {
+  const L = LAYERS[selected];
+  if (!L) return;
+  const m = layerMetrics(c, L, W, H);
+  const pad = m.px * 0.12, u = Math.max(1, W / 700);
+  c.save();
+  c.translate(L.x * W, L.y * H);
+  c.rotate(L.rot * Math.PI / 180);
+  c.lineWidth = 1.5 * u;
+  c.setLineDash([]);
+  c.strokeStyle = 'rgba(0,0,0,0.6)';
+  c.strokeRect(m.x0 - pad, -m.h / 2 - pad, m.w + 2 * pad, m.h + 2 * pad);
+  c.setLineDash([6 * u, 4 * u]);
+  c.strokeStyle = LIME;
+  c.strokeRect(m.x0 - pad, -m.h / 2 - pad, m.w + 2 * pad, m.h + 2 * pad);
+  c.restore();
+}
 
-  // logo / ampersand
-  if (layout === 'stacked') {
-    c.fillStyle = main;
-    const px = S * 0.038;
-    c.font = font(500, px * 1.4);
-    const ampW = c.measureText('&').width;
-    c.font = font(500, px);
-    const bw = c.measureText(brand).width;
-    const total = ampW + px * 0.25 + bw;
-    const x0 = (W - total) / 2, y0 = H - m * 1.2;
-    c.font = font(500, px * 1.4);
-    c.fillText('&', x0, y0 + px * 0.12);
-    c.font = font(500, px);
-    c.fillText(brand, x0 + ampW + px * 0.25, y0);
-  } else {
-    c.fillStyle = accent;
-    c.font = font(500, S * 0.06);
-    c.fillText('&', m, H - m);
-    if (tagline) {
-      c.font = font(700, S * 0.026);
-      c.textAlign = 'right';
-      c.fillText(tagline, W - m, H - m);
-      c.textAlign = 'left';
-    }
+function hitLayer(nx, ny) {
+  const W = poster.width, H = poster.height;
+  for (let i = LAYERS.length - 1; i >= 0; i--) {
+    const L = LAYERS[i], m = layerMetrics(ctx, L, W, H);
+    const dx = (nx - L.x) * W, dy = (ny - L.y) * H, a = -L.rot * Math.PI / 180;
+    const lx = dx * Math.cos(a) - dy * Math.sin(a), ly = dx * Math.sin(a) + dy * Math.cos(a);
+    const pad = m.px * 0.15;
+    if (lx >= m.x0 - pad && lx <= m.x0 + m.w + pad && ly >= -m.h / 2 - pad && ly <= m.h / 2 + pad) return i;
   }
+  return -1;
+}
+
+function drawTypography(c, W, H, preview) {
+  for (const L of LAYERS) drawLayer(c, L, W, H);
 
   if ($('showHash').checked && hashHex) {
+    const S = Math.min(W, H / 1.5), m = S * 0.065;
     c.save();
     c.globalAlpha = 0.7;
-    c.fillStyle = main;
+    c.fillStyle = COLORS.accent || LIME;
     c.font = `400 ${S * 0.0135}px "JetBrains Mono"`;
     c.textAlign = 'right';
+    c.textBaseline = 'alphabetic';
     c.fillText('SHA-256', W - m, m * 0.9);
     c.fillText(hashHex.slice(0, 32), W - m, m * 0.9 + S * 0.02);
     c.fillText(hashHex.slice(32), W - m, m * 0.9 + S * 0.04);
     c.restore();
   }
+  if (preview) drawSelection(c, W, H);
 }
 
-function compose(canvas, W, H, t) {
-  renderGL(W, H, t);
+// the fluid background only re-renders when its inputs change, so dragging
+// text around stays smooth
+const bgCache = document.createElement('canvas');
+let bgKey = '';
+function compose(canvas, W, H, t, preview = false) {
+  const key = `${W}x${H}|${t}|${JSON.stringify(P)}`;
+  if (key !== bgKey) {
+    renderGL(W, H, t);
+    bgCache.width = W; bgCache.height = H;
+    bgCache.getContext('2d').drawImage(glCanvas, 0, 0);
+    bgKey = key;
+  }
   canvas.width = W; canvas.height = H;
   const c = canvas.getContext('2d');
-  c.drawImage(glCanvas, 0, 0);
-  drawTypography(c, W, H);
+  c.drawImage(bgCache, 0, 0);
+  drawTypography(c, W, H, preview);
 }
 
-// fit the poster box into the free area of <main>, keeping the chosen aspect
 function previewSize() {
   const main = poster.parentElement, cs = getComputedStyle(main);
   const availW = main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
@@ -749,7 +848,7 @@ function previewSize() {
 function draw() {
   if (!P) return;
   const [W, H] = animating ? previewSize().map(v => Math.round(v * 0.6)) : previewSize();
-  compose(poster, W, H, time);
+  compose(poster, W, H, time, true);
 }
 
 function loop() {
@@ -767,6 +866,7 @@ async function useBytes(buffer, label) {
 function useDigest(digest, label) {
   hashHex = [...digest].map(b => b.toString(16).padStart(2, '0')).join('');
   BASE = paramsFromHash(digest);
+  if ($('layout').value === 'auto' && !layersEdited) { LAYERS = templateLayers('auto'); selected = -1; renderLayerList(); }
   applyControls();
   $('hashOut').textContent = hashHex;
   $('fileName').textContent = label || '';
@@ -780,36 +880,57 @@ function useDigest(digest, label) {
 }
 
 const drop = $('drop'), fileInput = $('file');
+
+// exactly one hash source is active; the other input is hidden
+let source = 'text', lastFile = null;
+async function setSource(src, recompute = true) {
+  source = src;
+  $('srcFile').setAttribute('aria-selected', src === 'file');
+  $('srcText').setAttribute('aria-selected', src === 'text');
+  drop.classList.toggle('hidden', src !== 'file');
+  $('textSrc').classList.toggle('hidden', src !== 'text');
+  if (!recompute) return;
+  if (src === 'file' && lastFile) await useBytes(lastFile.bytes, lastFile.label);
+  if (src === 'text' && $('seedText').value) await useBytes(new TextEncoder().encode($('seedText').value), '');
+}
+async function useFile(f) {
+  lastFile = { bytes: await f.arrayBuffer(), label: `${f.name} · ${(f.size / 1024).toFixed(1)} kB` };
+  await setSource('file', false);
+  useBytes(lastFile.bytes, lastFile.label);
+}
+$('srcFile').addEventListener('click', () => setSource('file'));
+$('srcText').addEventListener('click', () => setSource('text'));
 drop.addEventListener('click', () => fileInput.click());
 drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
 fileInput.addEventListener('change', async () => {
   const f = fileInput.files[0];
-  if (f) useBytes(await f.arrayBuffer(), `${f.name} · ${(f.size / 1024).toFixed(1)} kB`);
+  if (f) useFile(f);
 });
 ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
 drop.addEventListener('drop', async e => {
   const f = e.dataTransfer.files[0];
-  if (f) useBytes(await f.arrayBuffer(), `${f.name} · ${(f.size / 1024).toFixed(1)} kB`);
+  if (f) useFile(f);
 });
 // whole window accepts drops too
 window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', async e => {
   e.preventDefault();
   const f = e.dataTransfer.files[0];
-  if (f && !drop.contains(e.target)) useBytes(await f.arrayBuffer(), `${f.name} · ${(f.size / 1024).toFixed(1)} kB`);
+  if (f && !drop.contains(e.target)) useFile(f);
 });
 
 $('seedText').addEventListener('input', e => useBytes(new TextEncoder().encode(e.target.value), ''));
-['headline', 'tagline', 'layout', 'showHash'].forEach(id => $(id).addEventListener('input', draw));
+$('showHash').addEventListener('input', draw);
 $('animate').addEventListener('change', e => {
   animating = e.target.checked;
   if (animating) loop(); else draw();
 });
 $('random').addEventListener('click', () => {
-  const r = crypto.getRandomValues(new Uint8Array(64));
-  $('seedText').value = '';
-  useBytes(r, 'náhodná data (64 B)');
+  // a short random text keeps the result reproducible and shareable
+  const abc = 'abcdefghijkmnpqrstuvwxyz23456789';
+  $('seedText').value = [...crypto.getRandomValues(new Uint8Array(8))].map(b => abc[b % abc.length]).join('');
+  setSource('text');
 });
 $('export').addEventListener('click', () => {
   if (!P) return;
@@ -826,8 +947,6 @@ $('export').addEventListener('click', () => {
   draw();
 });
 $('format').addEventListener('input', draw);
-$('textColor').addEventListener('input', () => { syncColors(); draw(); });
-$('textHex').addEventListener('input', () => { $('textColor').value = 'custom'; draw(); });
 
 // fonts are loaded from Google Fonts on demand
 const loadedFonts = new Set(['Outfit', 'JetBrains Mono']);
@@ -842,7 +961,163 @@ async function ensureFont(name) {
   }
   await Promise.all([300, 500, 700].map(w => document.fonts.load(`${w} 40px "${name}"`))).catch(() => {});
 }
-$('font').addEventListener('input', async () => { await ensureFont($('font').value); draw(); });
+async function ensureLayerFonts() {
+  await Promise.all([...new Set(LAYERS.map(L => L.font))].map(ensureFont));
+}
+
+// ---------- layer panel ----------
+const LSLIDERS = [
+  { key: 'size', label: 'velikost', min: 0.01, max: 0.5, step: 0.001, fmt: v => (v * 100).toFixed(1) + ' %' },
+  { key: 'rot', label: 'natočení', min: -180, max: 180, step: 1, fmt: v => Math.round(v) + '°' },
+  { key: 'x', label: 'pozice x', min: 0, max: 1, step: 0.001, fmt: v => Math.round(v * 100) + ' %' },
+  { key: 'y', label: 'pozice y', min: 0, max: 1, step: 0.001, fmt: v => Math.round(v * 100) + ' %' },
+  { key: 'tracking', label: 'prostrkání', min: -0.15, max: 0.6, step: 0.005, fmt: v => v.toFixed(3) },
+  { key: 'lh', label: 'řádkování', min: 0.6, max: 2, step: 0.01, fmt: v => v.toFixed(2) },
+  { key: 'opacity', label: 'krytí', min: 0, max: 1, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
+];
+const esc = t => t.replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+function buildLayerSliders() {
+  const root = $('layerSliders');
+  for (const d of LSLIDERS) {
+    const el = document.createElement('div');
+    el.className = 'slider';
+    el.innerHTML = `<div class="lbl"><span>${d.label}</span><b></b></div>
+      <input type="range" min="${d.min}" max="${d.max}" step="${d.step}" aria-label="${d.label}">`;
+    d.input = el.querySelector('input'); d.out = el.querySelector('b');
+    d.input.addEventListener('input', () => editLayer({ [d.key]: +d.input.value }));
+    root.appendChild(el);
+  }
+}
+
+function renderLayerList() {
+  $('layerList').innerHTML = LAYERS.map((L, i) =>
+    `<button class="layer-item${i === selected ? ' sel' : ''}" data-i="${i}">
+      <span>${esc(L.text.split('\n')[0]) || '(prázdný)'}</span><small>${esc(L.font)}${L.rot ? ' · ' + Math.round(L.rot) + '°' : ''}</small>
+    </button>`).reverse().join('') || '<small style="color:var(--muted)">Žádný text – přidej ho tlačítkem + text.</small>';
+  const L = LAYERS[selected];
+  $('layerEditor').classList.toggle('hidden', !L);
+  for (const id of ['dupLayer', 'upLayer', 'downLayer', 'delLayer']) $(id).disabled = !L;
+  if (!L) return;
+  if (document.activeElement !== $('lText')) $('lText').value = L.text;
+  $('lFont').value = L.font;
+  $('lWeight').value = String(L.weight);
+  $('lAccent').checked = L.color === 'accent';
+  $('lColor').value = layerColor(L);
+  $('lAlign').value = L.align;
+  $('lShadow').checked = L.shadow;
+  for (const d of LSLIDERS) { d.input.value = L[d.key]; d.out.textContent = d.fmt(L[d.key]); }
+}
+
+function editLayer(patch) {
+  const L = LAYERS[selected];
+  if (!L) return;
+  Object.assign(L, patch);
+  layersEdited = true;
+  renderLayerList();
+  draw();
+}
+
+function selectLayer(i) {
+  selected = i;
+  renderLayerList();
+  draw();
+}
+
+$('layerList').addEventListener('click', e => {
+  const b = e.target.closest('[data-i]');
+  if (b) selectLayer(+b.dataset.i);
+});
+$('lText').addEventListener('input', () => editLayer({ text: $('lText').value }));
+$('lFont').addEventListener('input', async () => { await ensureFont($('lFont').value); editLayer({ font: $('lFont').value }); });
+$('lWeight').addEventListener('input', () => editLayer({ weight: +$('lWeight').value }));
+$('lColor').addEventListener('input', () => editLayer({ color: $('lColor').value }));
+$('lAccent').addEventListener('input', () => editLayer({ color: $('lAccent').checked ? 'accent' : $('lColor').value }));
+$('lAlign').addEventListener('input', () => editLayer({ align: $('lAlign').value }));
+$('lShadow').addEventListener('input', () => editLayer({ shadow: $('lShadow').checked }));
+document.querySelectorAll('[data-rot]').forEach(b => b.addEventListener('click', () => editLayer({ rot: +b.dataset.rot })));
+document.querySelectorAll('[data-center]').forEach(b => b.addEventListener('click', () => {
+  const L = LAYERS[selected];
+  if (L) editLayer({ [b.dataset.center]: 0.5, ...(b.dataset.center === 'x' && L.rot % 180 === 0 ? { align: 'center' } : {}) });
+}));
+$('addLayer').addEventListener('click', () => {
+  LAYERS.push(makeLayer({ text: 'nový text', color: WHITE, size: 0.09, weight: 700 }));
+  layersEdited = true;
+  selectLayer(LAYERS.length - 1);
+  $('lText').focus();
+  $('lText').select();
+});
+$('dupLayer').addEventListener('click', () => {
+  const L = LAYERS[selected];
+  if (!L) return;
+  LAYERS.splice(selected + 1, 0, { ...L, x: Math.min(1, L.x + 0.03), y: Math.min(1, L.y + 0.03) });
+  layersEdited = true;
+  selectLayer(selected + 1);
+});
+$('delLayer').addEventListener('click', () => {
+  if (selected < 0) return;
+  LAYERS.splice(selected, 1);
+  layersEdited = true;
+  selectLayer(Math.min(selected, LAYERS.length - 1));
+});
+for (const [id, dir] of [['upLayer', 1], ['downLayer', -1]]) {
+  $(id).addEventListener('click', () => {
+    const j = selected + dir;
+    if (selected < 0 || j < 0 || j >= LAYERS.length) return;
+    [LAYERS[selected], LAYERS[j]] = [LAYERS[j], LAYERS[selected]];
+    layersEdited = true;
+    selectLayer(j);
+  });
+}
+$('layout').addEventListener('input', async () => {
+  LAYERS = templateLayers($('layout').value);
+  layersEdited = false;
+  selected = -1;
+  await ensureLayerFonts();
+  renderLayerList();
+  draw();
+});
+
+// drag text directly on the poster
+let drag = null;
+const posterPoint = e => {
+  const r = poster.getBoundingClientRect();
+  return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+};
+poster.addEventListener('pointerdown', e => {
+  const [nx, ny] = posterPoint(e);
+  const i = hitLayer(nx, ny);
+  selectLayer(i);
+  if (i < 0) return;
+  drag = { dx: LAYERS[i].x - nx, dy: LAYERS[i].y - ny };
+  poster.setPointerCapture(e.pointerId);
+});
+poster.addEventListener('pointermove', e => {
+  const [nx, ny] = posterPoint(e);
+  if (!drag) {
+    poster.style.cursor = hitLayer(nx, ny) >= 0 ? 'move' : '';
+    return;
+  }
+  editLayer({ x: +(nx + drag.dx).toFixed(4), y: +(ny + drag.dy).toFixed(4) });
+});
+const endDrag = () => { drag = null; };
+poster.addEventListener('pointerup', endDrag);
+poster.addEventListener('pointercancel', endDrag);
+document.addEventListener('keydown', e => {
+  if (selected < 0 || e.target.closest('input, textarea, select')) return;
+  const step = e.shiftKey ? 0.02 : 0.004, L = LAYERS[selected];
+  const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+  if (moves[e.key]) {
+    e.preventDefault();
+    editLayer({ x: +(L.x + moves[e.key][0]).toFixed(4), y: +(L.y + moves[e.key][1]).toFixed(4) });
+  } else if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    $('delLayer').click();
+  } else if (e.key === 'Escape') {
+    selectLayer(-1);
+  }
+});
+buildLayerSliders();
 
 for (const [id, key] of [['cAccent', 'accent'], ['cSecond', 'second'], ['cDark', 'dark']]) {
   $(id).addEventListener('input', () => { COLORS[key] = $(id).value; applyControls(); draw(); });
@@ -868,7 +1143,7 @@ window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw
 // ---------- URL state (shareable links, used by the MCP server) ----------
 // ?seed=text | ?sha=<64 hex>, layout, format, headline, tagline, textColor, showHash=1,
 // plus any slider key (scale, warp, limeFrac, ...).
-const FIELDS = ['layout', 'format', 'headline', 'tagline', 'textColor', 'font'];
+const FIELDS = ['layout', 'format'];
 const HEXES = { cAccent: 'accent', cSecond: 'second', cDark: 'dark' };
 const isHex = v => /^#?[0-9a-f]{6}$/i.test(v || '');
 
@@ -876,7 +1151,6 @@ function applyQuery(q) {
   for (const f of FIELDS) if (q.has(f)) $(f).value = q.get(f);
   if (q.has('showHash')) $('showHash').checked = q.get('showHash') === '1';
   for (const k in HEXES) if (isHex(q.get(k))) COLORS[HEXES[k]] = '#' + q.get(k).replace('#', '');
-  if (isHex(q.get('textHex'))) { $('textHex').value = '#' + q.get('textHex').replace('#', ''); if (!q.has('textColor')) $('textColor').value = 'custom'; }
   for (const d of SLIDERS) {
     if (d.key && q.has(d.key) && Number.isFinite(+q.get(d.key))) overrides[d.key] = +q.get(d.key);
   }
@@ -884,13 +1158,13 @@ function applyQuery(q) {
 
 function shareUrl() {
   const q = new URLSearchParams();
-  if (/^[0-9a-f]{64}$/.test(hashHex) && $('seedText').value === '' ) q.set('sha', hashHex);
+  if (source === 'file') q.set('sha', hashHex);
   else q.set('seed', $('seedText').value);
   for (const f of FIELDS) q.set(f, $(f).value);
   if ($('showHash').checked) q.set('showHash', '1');
   for (const k in overrides) q.set(k, +(+overrides[k]).toFixed(4));
   for (const k in HEXES) if (COLORS[HEXES[k]]) q.set(k, COLORS[HEXES[k]].slice(1));
-  if ($('textColor').value === 'custom') q.set('textHex', $('textHex').value.slice(1));
+  q.set('layers', JSON.stringify(LAYERS));
   return `${location.origin}${location.pathname}?${q}`;
 }
 
@@ -917,16 +1191,30 @@ Promise.all([
 ]).catch(() => {}).finally(async () => {
   const q = new URLSearchParams(location.search);
   applyQuery(q);
-  await ensureFont($('font').value);
+  // layers: explicit ?layers=[...] wins, otherwise the template (with optional headline / tagline)
+  let fromUrl = null;
+  try { fromUrl = q.has('layers') ? JSON.parse(q.get('layers')) : null; } catch { fromUrl = null; }
   const sha = (q.get('sha') || '').toLowerCase();
   if (/^[0-9a-f]{64}$/.test(sha)) {
     $('seedText').value = '';
+    setSource('file', false);
     useDigest(new Uint8Array(sha.match(/../g).map(h => parseInt(h, 16))), 'soubor (z odkazu)');
   } else {
     if (q.has('seed')) $('seedText').value = q.get('seed');
     else if (location.hash.length > 1) $('seedText').value = decodeURIComponent(location.hash.slice(1));
     await useBytes(new TextEncoder().encode($('seedText').value), '');
   }
+  LAYERS = Array.isArray(fromUrl)
+    ? fromUrl.map(sanitizeLayer)
+    : templateLayers($('layout').value, q.get('headline') ?? undefined, q.get('tagline') ?? undefined);
+  layersEdited = Array.isArray(fromUrl);
+  try {
+    const extra = q.has('addLayers') ? JSON.parse(q.get('addLayers')) : [];
+    if (Array.isArray(extra) && extra.length) { LAYERS.push(...extra.map(sanitizeLayer)); layersEdited = true; }
+  } catch { /* ignore malformed addLayers */ }
+  await ensureLayerFonts();
+  renderLayerList();
+  draw();
   window.posterReady = true;
 });
 </script>
