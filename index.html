@@ -150,7 +150,7 @@
   .swatch.changed::after { content: "•"; color: var(--lime); margin-top: -4px; }
   .hidden { display: none !important; }
   .tune .row button { margin-top: 0; }
-  .seg { display: grid; grid-template-columns: 1fr 1fr; background: #0f1115; border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; background: #0f1115; border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 3px; }
   .seg button { background: transparent; color: var(--muted); padding: 8px; border-radius: 7px; font-weight: 500; }
   .seg button[aria-selected="true"] { background: var(--lime); color: #15170c; font-weight: 600; }
   .tune .row.actions { gap: 6px; }
@@ -209,6 +209,7 @@
   <div class="seg" role="tablist" aria-label="zdroj hashe">
     <button id="srcFile" role="tab" aria-selected="false">Soubor</button>
     <button id="srcText" role="tab" aria-selected="true">Text</button>
+    <button id="srcRandom" role="tab" aria-selected="false" title="Každé kliknutí vygeneruje nový plakát">Náhodně</button>
   </div>
 
   <div id="drop" tabindex="0" class="hidden">
@@ -216,6 +217,12 @@
     <small>nebo klikni a vyber</small>
     <div id="fileName"></div>
     <input id="file" type="file" hidden>
+  </div>
+
+  <div id="randomSrc" class="hidden">
+    <label>náhodný kód</label>
+    <div class="hash" id="randomSeed">—</div>
+    <small style="color:var(--muted);display:block;margin-top:6px">Další variantu vygeneruješ dalším kliknutím na „Náhodně“.</small>
   </div>
 
   <div id="textSrc">
@@ -372,10 +379,7 @@
     <button id="resetTune" class="ghost">Vrátit hodnoty z hashe</button>
   </details>
 
-  <div class="row">
-    <button id="export">Stáhnout PNG</button>
-    <button id="random" class="ghost">Náhodně</button>
-  </div>
+  <button id="export">Stáhnout PNG</button>
   <button id="share" class="ghost">Kopírovat odkaz</button>
 
   <details>
@@ -1068,21 +1072,29 @@ function useDigest(digest, label) {
 const drop = $('drop'), fileInput = $('file');
 
 // exactly one hash source is active; the other input is hidden
-let source = 'text', lastFile = null;
+let source = 'text', lastFile = null, randomSeed = '';
 // an empty field falls back to the brand name
 const DEFAULT_SEED = 'etnetera';
-const seedValue = () => $('seedText').value || DEFAULT_SEED;
+const seedValue = () => (source === 'random' ? randomSeed : $('seedText').value || DEFAULT_SEED);
+// a short random text keeps a random poster reproducible and shareable
+function newRandomSeed() {
+  const abc = 'abcdefghijkmnpqrstuvwxyz23456789';
+  randomSeed = [...crypto.getRandomValues(new Uint8Array(8))].map(b => abc[b % abc.length]).join('');
+  $('randomSeed').textContent = randomSeed;
+}
 const seedBytes = () => new TextEncoder().encode(seedValue());
 
 async function setSource(src, recompute = true) {
   source = src;
   $('srcFile').setAttribute('aria-selected', src === 'file');
   $('srcText').setAttribute('aria-selected', src === 'text');
+  $('srcRandom').setAttribute('aria-selected', src === 'random');
   drop.classList.toggle('hidden', src !== 'file');
   $('textSrc').classList.toggle('hidden', src !== 'text');
+  $('randomSrc').classList.toggle('hidden', src !== 'random');
   if (!recompute) return;
   if (src === 'file' && lastFile) await useBytes(lastFile.bytes, lastFile.label);
-  if (src === 'text') await useBytes(seedBytes(), '');
+  if (src === 'text' || src === 'random') await useBytes(seedBytes(), '');
 }
 async function useFile(f) {
   lastFile = { bytes: await f.arrayBuffer(), label: `${f.name} · ${(f.size / 1024).toFixed(1)} kB` };
@@ -1091,6 +1103,8 @@ async function useFile(f) {
 }
 $('srcFile').addEventListener('click', () => setSource('file'));
 $('srcText').addEventListener('click', () => setSource('text'));
+// every click (also a repeated one) rolls a new random poster
+$('srcRandom').addEventListener('click', () => { newRandomSeed(); setSource('random'); });
 drop.addEventListener('click', () => fileInput.click());
 drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
 fileInput.addEventListener('change', async () => {
@@ -1116,12 +1130,6 @@ $('showHash').addEventListener('input', draw);
 $('animate').addEventListener('change', e => {
   animating = e.target.checked;
   if (animating) loop(); else draw();
-});
-$('random').addEventListener('click', () => {
-  // a short random text keeps the result reproducible and shareable
-  const abc = 'abcdefghijkmnpqrstuvwxyz23456789';
-  $('seedText').value = [...crypto.getRandomValues(new Uint8Array(8))].map(b => abc[b % abc.length]).join('');
-  setSource('text');
 });
 $('export').addEventListener('click', () => {
   if (!P) return;
@@ -1377,7 +1385,7 @@ document.addEventListener('keydown', e => {
 
   if (e.key === '?') { e.preventDefault(); toggleHelp(); return; }
   if (key === 't') { e.preventDefault(); $('addLayer').click(); return; }
-  if (key === 'r') { e.preventDefault(); $('random').click(); return; }
+  if (key === 'r') { e.preventDefault(); $('srcRandom').click(); return; }
   if (key === 'a') { e.preventDefault(); $('animate').click(); return; }
   if (selected < 0) return;
   const step = e.shiftKey ? 0.02 : 0.004, L = LAYERS[selected];
@@ -1466,7 +1474,7 @@ let hist = [], hIndex = -1, snapTimer = 0, restoring = false, ready = false;
 
 function getState() {
   return {
-    source, seedText: $('seedText').value, sha: source === 'file' ? hashHex : '', fileLabel: currentLabel,
+    source, seedText: $('seedText').value, randomSeed, sha: source === 'file' ? hashHex : '', fileLabel: currentLabel,
     layout: $('layout').value, format: $('format').value, showHash: $('showHash').checked,
     palette: $('palette').value, colors: { ...COLORS }, overrides: { ...overrides },
     layers: LAYERS, layersEdited,
@@ -1484,7 +1492,10 @@ async function applyState(st) {
     for (const k in overrides) delete overrides[k];
     Object.assign(overrides, st.overrides || {});
     Object.assign(COLORS, { accent: null, second: null, dark: null }, st.colors || {});
-    await setSource(st.source === 'file' ? 'file' : 'text', false);
+    randomSeed = st.randomSeed || '';
+    $('randomSeed').textContent = randomSeed || '—';
+    const src = st.source === 'random' && randomSeed ? 'random' : st.source === 'file' ? 'file' : 'text';
+    await setSource(src, false);
     if (st.source === 'file' && /^[0-9a-f]{64}$/.test(st.sha || '')) {
       useDigest(new Uint8Array(st.sha.match(/../g).map(h => parseInt(h, 16))), st.fileLabel || 'soubor');
     } else {
