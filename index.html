@@ -203,6 +203,7 @@ era</textarea>
     <button id="export">Stáhnout PNG</button>
     <button id="random" class="ghost">Náhodně</button>
   </div>
+  <button id="share" class="ghost">Kopírovat odkaz</button>
 
   <details>
     <summary>parametry z hashe</summary>
@@ -334,7 +335,11 @@ void main() {
 // ---------- WebGL setup ----------
 const glCanvas = document.getElementById('gl');
 const gl = glCanvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false });
-if (!gl) alert('WebGL není dostupné.');
+if (!gl) {
+  window.posterError = 'no-webgl';
+  document.querySelector('main').insertAdjacentHTML('beforeend', '<p>WebGL není v tomto prohlížeči dostupné.</p>');
+  throw new Error('WebGL unavailable');
+}
 
 function compile(type, src) {
   const s = gl.createShader(type);
@@ -674,7 +679,10 @@ function loop() {
 
 // ---------- input ----------
 async function useBytes(buffer, label) {
-  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
+  useDigest(new Uint8Array(await crypto.subtle.digest('SHA-256', buffer)), label);
+}
+
+function useDigest(digest, label) {
   hashHex = [...digest].map(b => b.toString(16).padStart(2, '0')).join('');
   BASE = paramsFromHash(digest);
   applyControls();
@@ -747,13 +755,62 @@ buildSliders();
 let rt;
 window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw, 120); });
 
+// ---------- URL state (shareable links, used by the MCP server) ----------
+// ?seed=text | ?sha=<64 hex>, layout, format, headline, tagline, textColor, showHash=1,
+// plus any slider key (scale, warp, limeFrac, ...).
+const FIELDS = ['layout', 'format', 'headline', 'tagline', 'textColor'];
+
+function applyQuery(q) {
+  for (const f of FIELDS) if (q.has(f)) $(f).value = q.get(f);
+  if (q.has('showHash')) $('showHash').checked = q.get('showHash') === '1';
+  for (const d of SLIDERS) {
+    if (d.key && q.has(d.key) && Number.isFinite(+q.get(d.key))) overrides[d.key] = +q.get(d.key);
+  }
+}
+
+function shareUrl() {
+  const q = new URLSearchParams();
+  if (/^[0-9a-f]{64}$/.test(hashHex) && $('seedText').value === '' ) q.set('sha', hashHex);
+  else q.set('seed', $('seedText').value);
+  for (const f of FIELDS) q.set(f, $(f).value);
+  if ($('showHash').checked) q.set('showHash', '1');
+  for (const k in overrides) q.set(k, +(+overrides[k]).toFixed(4));
+  return `${location.origin}${location.pathname}?${q}`;
+}
+
+$('share').addEventListener('click', async () => {
+  const url = shareUrl();
+  history.replaceState(null, '', url);
+  try { await navigator.clipboard.writeText(url); $('share').textContent = 'Zkopírováno ✓'; }
+  catch { $('share').textContent = 'Odkaz v adrese ✓'; }
+  setTimeout(() => { $('share').textContent = 'Kopírovat odkaz'; }, 1600);
+});
+
+// headless API: returns a PNG data URL of the poster with the longer side = `long`
+window.renderPosterPNG = (long = 1800) => {
+  const ar = aspect(), out = document.createElement('canvas');
+  compose(out, Math.round(ar >= 1 ? long : long * ar), Math.round(ar >= 1 ? long / ar : long), time);
+  return out.toDataURL('image/png');
+};
+window.posterInfo = () => ({ sha256: hashHex, webgl: !!gl, params: P, share: shareUrl() });
+
 // initial
 Promise.all([
   document.fonts.load('300 40px Outfit'), document.fonts.load('500 40px Outfit'),
   document.fonts.load('700 40px Outfit'), document.fonts.load('400 20px "JetBrains Mono"'),
 ]).catch(() => {}).finally(() => {
-  if (location.hash.length > 1) $('seedText').value = decodeURIComponent(location.hash.slice(1));
-  useBytes(new TextEncoder().encode($('seedText').value), '');
+  const q = new URLSearchParams(location.search);
+  applyQuery(q);
+  const sha = (q.get('sha') || '').toLowerCase();
+  if (/^[0-9a-f]{64}$/.test(sha)) {
+    $('seedText').value = '';
+    useDigest(new Uint8Array(sha.match(/../g).map(h => parseInt(h, 16))), 'soubor (z odkazu)');
+  } else {
+    if (q.has('seed')) $('seedText').value = q.get('seed');
+    else if (location.hash.length > 1) $('seedText').value = decodeURIComponent(location.hash.slice(1));
+    useBytes(new TextEncoder().encode($('seedText').value), '');
+  }
+  window.posterReady = true;
 });
 </script>
 </body>
