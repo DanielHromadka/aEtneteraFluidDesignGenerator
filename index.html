@@ -18,6 +18,13 @@
     --lav: #8c8dd0;
   }
   * { box-sizing: border-box; }
+  :root {
+    --cur: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path d='M3 2 L3 19 L7.5 14.5 L10.5 21 L13.5 19.7 L10.6 13.3 L17 13.3 Z' fill='%23cdeb12' stroke='%23000' stroke-width='1.6' stroke-linejoin='round'/></svg>") 3 2, default;
+    --cur-pointer: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='7' fill='%23cdeb12' stroke='%23000' stroke-width='2'/><circle cx='12' cy='12' r='2' fill='%23000'/></svg>") 12 12, pointer;
+  }
+  html, body, * { cursor: var(--cur); }
+  button, select, summary, label.check, #drop, input[type=range], input[type=checkbox], input[type=checkbox] + * { cursor: var(--cur-pointer); }
+  input[type=text], textarea { cursor: text; caret-color: var(--lime); }
   html, body { margin: 0; height: 100%; }
   body {
     background: var(--bg);
@@ -151,10 +158,6 @@
     </select>
   </div>
 
-  <div>
-    <label for="brand">název</label>
-    <input id="brand" type="text" value="etnetera">
-  </div>
   <div>
     <label for="headline">headline (stacked)</label>
     <textarea id="headline">new
@@ -539,6 +542,7 @@ function renderGL(w, h, t) {
 }
 
 const $ = id => document.getElementById(id);
+const BRAND = 'etnetera';
 const LIME = '#d4f21a', WHITE = '#eef0e8', DARK = '#1c1f28';
 
 function fitFont(c, text, weight, maxW, startPx) {
@@ -552,7 +556,7 @@ function fitFont(c, text, weight, maxW, startPx) {
 
 function drawTypography(c, W, H) {
   const layout = $('layout').value === 'auto' ? P.layout : $('layout').value;
-  const brand = $('brand').value.trim();
+  const brand = BRAND;
   const tagline = $('tagline').value.trim();
   // size unit that works for any aspect ratio (equals W on a 2:3 poster)
   const S = Math.min(W, H / 1.5);
@@ -707,7 +711,7 @@ window.addEventListener('drop', async e => {
 });
 
 $('seedText').addEventListener('input', e => useBytes(new TextEncoder().encode(e.target.value), ''));
-['brand', 'headline', 'tagline', 'layout', 'showHash'].forEach(id => $(id).addEventListener('input', draw));
+['headline', 'tagline', 'layout', 'showHash'].forEach(id => $(id).addEventListener('input', draw));
 $('animate').addEventListener('change', e => {
   animating = e.target.checked;
   if (animating) loop(); else draw();
