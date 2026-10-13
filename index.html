@@ -18,13 +18,8 @@
     --lav: #8c8dd0;
   }
   * { box-sizing: border-box; }
-  :root {
-    --cur: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><path d='M3 2 L3 19 L7.5 14.5 L10.5 21 L13.5 19.7 L10.6 13.3 L17 13.3 Z' fill='%23cdeb12' stroke='%23000' stroke-width='1.6' stroke-linejoin='round'/></svg>") 3 2, default;
-    --cur-pointer: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='12' cy='12' r='7' fill='%23cdeb12' stroke='%23000' stroke-width='2'/><circle cx='12' cy='12' r='2' fill='%23000'/></svg>") 12 12, pointer;
-  }
-  html, body, * { cursor: var(--cur); }
-  button, select, summary, label.check, #drop, input[type=range], input[type=checkbox], input[type=checkbox] + * { cursor: var(--cur-pointer); }
-  input[type=text], textarea { cursor: text; caret-color: var(--lime); }
+  button, select, summary, label.check, input[type=checkbox] { cursor: pointer; }
+  input[type=text], textarea { caret-color: var(--lime); }
   html, body { margin: 0; height: 100%; }
   body {
     background: var(--bg);
@@ -63,7 +58,16 @@
   input[type=checkbox]:checked { background-color: var(--lime); border-color: var(--lime); background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3.5 8.5 6.5 11.5 12.5 4.5' fill='none' stroke='%2315170c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>"); }
   .check { gap: 10px; }
   #saved { position: absolute; right: 0; top: -18px; color: var(--muted); font-size: 11px; transition: opacity .4s; }
-  .toolbar .mcp { border-color: var(--lime); color: var(--lime); font-weight: 600; }
+  main { position: relative; }
+  .mcp-corner {
+    position: absolute; top: 14px; right: 16px; z-index: 2;
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(24, 27, 34, .85); backdrop-filter: blur(6px);
+    color: var(--text); border: 1px solid var(--line); border-radius: 999px;
+    padding: 7px 14px; font: 500 13px "Outfit", sans-serif;
+  }
+  .mcp-corner:hover { border-color: var(--lime); filter: none; }
+  .mcp-corner .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 8px var(--lime); }
   .modal p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
   .modal p strong { color: var(--text); font-weight: 500; }
   .modal code, .modal pre { font: 12px/1.5 "JetBrains Mono", monospace; color: var(--text); }
@@ -172,7 +176,7 @@
   main {
     display: grid;
     place-items: center;
-    padding: 32px;
+    padding: 60px 32px 32px;
     overflow: hidden;
     min-height: 0;
   }
@@ -185,7 +189,7 @@
     body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; height: auto; overflow: visible; }
     main { order: -1; min-width: 0; }
     aside { border-right: 0; border-bottom: 1px solid var(--line); }
-    main { padding: 16px; }
+    main { padding: 58px 16px 16px; }
   }
 </style>
 </head>
@@ -198,7 +202,6 @@
       <button id="undo" class="icon" title="Zpět" aria-label="Zpět"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
       <button id="redo" class="icon" title="Vpřed" aria-label="Vpřed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <button id="newDoc" title="Nový plakát">nový</button>
-      <button id="mcpBtn" class="mcp" title="Napojení do Claude (MCP)">MCP</button>
       <button id="helpBtn" title="Klávesové zkratky (?)" aria-label="Klávesové zkratky">?</button>
     </div>
   </div>
@@ -226,7 +229,7 @@
   </div>
 
   <label class="check"><input id="showHash" type="checkbox"> otisk hashe na plakátu</label>
-  <label class="check"><input id="animate" type="checkbox"> animovat proudění</label>
+  <label class="check"><input id="animate" type="checkbox" checked> animovat proudění</label>
 
   <details class="tune" open>
     <summary>Texty</summary>
@@ -404,6 +407,7 @@
 </div>
 
 <main>
+  <button id="mcpBtn" class="mcp-corner" title="Napojení do Claude (MCP)"><span class="dot"></span>MCP · použij v Claude</button>
   <canvas id="poster"></canvas>
   <canvas id="gl"></canvas>
 </main>
@@ -795,7 +799,7 @@ function templateLayers(name, headline = 'new\nera', tagline = 'Be Bold.') {
     makeLayer({ text: tagline, x: 0.935, y: 0.932, size: 0.026, weight: 700, align: 'right', color: 'accent' }),
   ];
   if (name === 'vertical') {
-    return [makeLayer({ text: BRAND, x: 0.56, y: 0.5, rot: -90, size: 0.24, color: 'accent', shadow: true }), ...corner];
+    return [makeLayer({ text: BRAND, x: 0.5, y: 0.5, rot: -90, size: 0.24, color: 'accent', shadow: true }), ...corner];
   }
   if (name === 'stacked') {
     return [
@@ -814,13 +818,21 @@ function layerMetrics(c, L, W, H) {
   const px = L.size * S;
   c.font = `${L.weight} ${px}px "${L.font}", Outfit, sans-serif`;
   c.letterSpacing = `${L.tracking * px}px`;
+  c.textBaseline = 'alphabetic';
   const lines = String(L.text).split('\n');
   const lineH = px * L.lh;
-  const w = Math.max(0, ...lines.map(l => c.measureText(l).width));
-  const h = lineH * lines.length;
+  const tms = lines.map(l => c.measureText(l));
+  const w = Math.max(0, ...tms.map(t => t.width));
+  // vertical extent from the real glyph outlines, so lowercase text without
+  // ascenders is centred optically, not by the em box
+  const ink = tms.filter((t, i) => lines[i].trim());
+  const asc = ink.length ? Math.max(...ink.slice(0, 1).map(t => t.actualBoundingBoxAscent)) : px * 0.7;
+  const desc = ink.length ? ink[ink.length - 1].actualBoundingBoxDescent : 0;
+  const h = Math.max(px * 0.2, asc + (lines.length - 1) * lineH + desc);
+  const base = lines.map((_, i) => -h / 2 + asc + i * lineH);
   const x0 = L.align === 'left' ? 0 : L.align === 'right' ? -w : -w / 2;
   c.letterSpacing = '0px';
-  return { px, lines, lineH, w, h, x0 };
+  return { px, lines, lineH, w, h, x0, base };
 }
 
 function drawLayer(c, L, W, H) {
@@ -833,9 +845,9 @@ function drawLayer(c, L, W, H) {
   c.globalAlpha = L.opacity;
   c.fillStyle = layerColor(L);
   c.textAlign = L.align;
-  c.textBaseline = 'middle';
+  c.textBaseline = 'alphabetic';
   if (L.shadow) { c.shadowColor = 'rgba(20, 22, 30, 0.45)'; c.shadowBlur = m.px * 0.25; }
-  m.lines.forEach((l, i) => c.fillText(l, 0, -m.h / 2 + (i + 0.5) * m.lineH));
+  m.lines.forEach((l, i) => c.fillText(l, 0, m.base[i]));
   c.restore();
 }
 
@@ -1015,17 +1027,18 @@ function previewSize() {
   return [Math.round(w * dpr), Math.round(h * dpr)];
 }
 
-function draw() {
+function draw(frame = false) {
   if (!P) return;
   const [W, H] = animating ? previewSize().map(v => Math.round(v * 0.6)) : previewSize();
   compose(poster, W, H, time, true);
-  scheduleSnapshot();
+  // animation frames are not user edits, so they must not postpone the autosave
+  if (!frame) scheduleSnapshot();
 }
 
 function loop() {
   if (!animating) return;
   time += P.speed / 60;
-  draw();
+  draw(true);
   requestAnimationFrame(loop);
 }
 
@@ -1581,6 +1594,10 @@ Promise.all([
   ready = true;
   snapshot();
   updateHistoryButtons();
+  // animation is on by default; ?animate=0 (used by the MCP renderer) keeps it still
+  $('animate').checked = q.get('animate') !== '0';
+  animating = $('animate').checked;
+  if (animating) loop();
   window.posterReady = true;
 });
 </script>

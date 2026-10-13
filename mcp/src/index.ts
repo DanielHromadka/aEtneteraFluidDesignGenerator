@@ -127,6 +127,7 @@ async function buildUrl(env: Env, a: Input): Promise<{ url: string; seedInfo: st
 		}
 	}
 	if (a.show_hash) q.set("showHash", "1");
+	q.set("animate", "0");
 	return { url: `${env.SITE_URL}?${q}`, seedInfo };
 }
 
