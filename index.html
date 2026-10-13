@@ -67,7 +67,7 @@
     padding: 7px 14px; font: 500 13px "Outfit", sans-serif;
   }
   .mcp-corner:hover { border-color: var(--lime); filter: none; }
-  .mcp-corner .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 8px var(--lime); }
+
   .modal p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
   .modal p strong { color: var(--text); font-weight: 500; }
   .modal code, .modal pre { font: 12px/1.5 "JetBrains Mono", monospace; color: var(--text); }
@@ -220,7 +220,7 @@
 
   <div id="textSrc">
     <label for="seedText">text k zahashování</label>
-    <input id="seedText" type="text" placeholder="libovolný text" value="etnetera">
+    <input id="seedText" type="text" placeholder="etnetera" value="">
   </div>
 
   <div>
@@ -407,7 +407,7 @@
 </div>
 
 <main>
-  <button id="mcpBtn" class="mcp-corner" title="Napojení do Claude (MCP)"><span class="dot"></span>MCP · použij v Claude</button>
+  <button id="mcpBtn" class="mcp-corner" title="MCP server">MCP</button>
   <canvas id="poster"></canvas>
   <canvas id="gl"></canvas>
 </main>
@@ -1069,6 +1069,11 @@ const drop = $('drop'), fileInput = $('file');
 
 // exactly one hash source is active; the other input is hidden
 let source = 'text', lastFile = null;
+// an empty field falls back to the brand name
+const DEFAULT_SEED = 'etnetera';
+const seedValue = () => $('seedText').value || DEFAULT_SEED;
+const seedBytes = () => new TextEncoder().encode(seedValue());
+
 async function setSource(src, recompute = true) {
   source = src;
   $('srcFile').setAttribute('aria-selected', src === 'file');
@@ -1077,7 +1082,7 @@ async function setSource(src, recompute = true) {
   $('textSrc').classList.toggle('hidden', src !== 'text');
   if (!recompute) return;
   if (src === 'file' && lastFile) await useBytes(lastFile.bytes, lastFile.label);
-  if (src === 'text' && $('seedText').value) await useBytes(new TextEncoder().encode($('seedText').value), '');
+  if (src === 'text') await useBytes(seedBytes(), '');
 }
 async function useFile(f) {
   lastFile = { bytes: await f.arrayBuffer(), label: `${f.name} · ${(f.size / 1024).toFixed(1)} kB` };
@@ -1106,7 +1111,7 @@ window.addEventListener('drop', async e => {
   if (f && !drop.contains(e.target)) useFile(f);
 });
 
-$('seedText').addEventListener('input', e => useBytes(new TextEncoder().encode(e.target.value), ''));
+$('seedText').addEventListener('input', () => useBytes(seedBytes(), ''));
 $('showHash').addEventListener('input', draw);
 $('animate').addEventListener('change', e => {
   animating = e.target.checked;
@@ -1432,7 +1437,7 @@ function applyQuery(q) {
 function shareUrl() {
   const q = new URLSearchParams();
   if (source === 'file') q.set('sha', hashHex);
-  else q.set('seed', $('seedText').value);
+  else q.set('seed', seedValue());
   for (const f of FIELDS) q.set(f, $(f).value);
   if ($('showHash').checked) q.set('showHash', '1');
   for (const k in overrides) q.set(k, +(+overrides[k]).toFixed(4));
@@ -1483,7 +1488,7 @@ async function applyState(st) {
     if (st.source === 'file' && /^[0-9a-f]{64}$/.test(st.sha || '')) {
       useDigest(new Uint8Array(st.sha.match(/../g).map(h => parseInt(h, 16))), st.fileLabel || 'soubor');
     } else {
-      await useBytes(new TextEncoder().encode($('seedText').value), '');
+      await useBytes(seedBytes(), '');
     }
     LAYERS = (st.layers || []).map(sanitizeLayer);
     layersEdited = !!st.layersEdited;
@@ -1547,7 +1552,7 @@ async function redo() {
 $('undo').addEventListener('click', undo);
 $('redo').addEventListener('click', redo);
 $('newDoc').addEventListener('click', async () => {
-  await applyState({ source: 'text', seedText: 'etnetera', layout: 'vertical', format: '2:3', layers: templateLayers('vertical') });
+  await applyState({ source: 'text', seedText: '', layout: 'vertical', format: '2:3', layers: templateLayers('vertical') });
   selectLayer(-1);
   snapshot();
 });
@@ -1573,7 +1578,7 @@ Promise.all([
   } else {
     if (q.has('seed')) $('seedText').value = q.get('seed');
     else if (location.hash.length > 1) $('seedText').value = decodeURIComponent(location.hash.slice(1));
-    await useBytes(new TextEncoder().encode($('seedText').value), '');
+    await useBytes(seedBytes(), '');
   }
   LAYERS = Array.isArray(fromUrl)
     ? fromUrl.map(sanitizeLayer)
