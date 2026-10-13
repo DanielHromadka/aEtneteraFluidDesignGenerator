@@ -50,6 +50,18 @@
   .toolbar { display: flex; gap: 3px; align-items: center; }
   .toolbar button { background: transparent; color: var(--text); border: 1px solid var(--line); padding: 4px 8px; font-size: 13px; border-radius: 7px; }
   .toolbar button:disabled { opacity: .35; filter: none; }
+  .toolbar button.icon { display: grid; place-items: center; padding: 4px 6px; height: 28px; }
+  .toolbar button { height: 28px; }
+  .toolbar button:not(:disabled):hover { border-color: var(--lime); color: var(--lime); filter: none; }
+  input[type=checkbox] {
+    appearance: none; -webkit-appearance: none; flex-shrink: 0;
+    width: 18px; height: 18px; margin: 0;
+    background: #0f1115 center / 14px no-repeat; border: 1.5px solid #3a3f4d; border-radius: 5px;
+    transition: background-color .12s, border-color .12s;
+  }
+  input[type=checkbox]:hover { border-color: var(--lime); }
+  input[type=checkbox]:checked { background-color: var(--lime); border-color: var(--lime); background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M3.5 8.5 6.5 11.5 12.5 4.5' fill='none' stroke='%2315170c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/></svg>"); }
+  .check { gap: 10px; }
   #saved { position: absolute; right: 0; top: -18px; color: var(--muted); font-size: 11px; transition: opacity .4s; }
   .toolbar .mcp { border-color: var(--lime); color: var(--lime); font-weight: 600; }
   .modal p { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
@@ -183,8 +195,8 @@
     <h1>fluid<span>/</span>poster</h1>
     <div class="toolbar">
       <span id="saved"></span>
-      <button id="undo" title="Zpět" aria-label="Zpět">↶</button>
-      <button id="redo" title="Vpřed" aria-label="Vpřed">↷</button>
+      <button id="undo" class="icon" title="Zpět" aria-label="Zpět"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+      <button id="redo" class="icon" title="Vpřed" aria-label="Vpřed"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
       <button id="newDoc" title="Nový plakát">nový</button>
       <button id="mcpBtn" class="mcp" title="Napojení do Claude (MCP)">MCP</button>
       <button id="helpBtn" title="Klávesové zkratky (?)" aria-label="Klávesové zkratky">?</button>
