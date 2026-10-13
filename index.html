@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fluid Poster Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #111318;
+    --panel: #181b22;
+    --line: #2a2e38;
+    --text: #e8e9ee;
+    --muted: #8b8fa0;
+    --lime: #cdeb12;
+    --lav: #8c8dd0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.45 "Outfit", system-ui, sans-serif;
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: 100vh;
+  }
+  aside {
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow-y: auto;
+  }
+  h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--lime); }
+  .sub { color: var(--muted); margin: -12px 0 0; }
+  label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; text-transform: lowercase; }
+  input[type=text], textarea, select {
+    width: 100%;
+    background: #0f1115;
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 10px;
+    font: inherit;
+  }
+  textarea { resize: vertical; min-height: 54px; }
+  input:focus, textarea:focus, select:focus { outline: 2px solid var(--lav); outline-offset: -1px; }
+  #drop {
+    border: 1.5px dashed #3a3f4d;
+    border-radius: 12px;
+    padding: 22px 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  #drop:hover, #drop.over { border-color: var(--lime); background: rgba(205,235,18,.05); }
+  #drop strong { display: block; font-size: 15px; font-weight: 500; }
+  #drop small { color: var(--muted); }
+  #fileName { margin-top: 6px; color: var(--lime); word-break: break-all; font-size: 13px; }
+  .hash {
+    font: 11px/1.5 "JetBrains Mono", monospace;
+    color: var(--muted);
+    word-break: break-all;
+    background: #0f1115;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--lime);
+    color: #15170c;
+    border: 0;
+    border-radius: 8px;
+    padding: 11px 12px;
+    font: 600 14px "Outfit", sans-serif;
+    cursor: pointer;
+  }
+  button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  button:hover { filter: brightness(1.08); }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; text-transform: none; margin: 0; }
+  details { color: var(--muted); font-size: 12px; }
+  details pre { font: 11px/1.5 "JetBrains Mono", monospace; white-space: pre-wrap; margin: 8px 0 0; }
+  main {
+    display: grid;
+    place-items: center;
+    padding: 32px;
+    overflow: hidden;
+  }
+  #poster {
+    height: min(calc(100vh - 64px), 150vw);
+    max-width: 100%;
+    aspect-ratio: 2 / 3;
+    box-shadow: 0 30px 80px rgba(0,0,0,.55);
+    border-radius: 2px;
+  }
+  #gl { display: none; }
+  @media (max-width: 820px) {
+    body { grid-template-columns: 1fr; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); }
+    main { padding: 16px; }
+    #poster { height: auto; width: 100%; }
+  }
+</style>
+</head>
+<body>
+<aside>
+  <h1>fluid<span>/</span>poster</h1>
+  <p class="sub">SHA-256 souboru → unikátní fluid plakát</p>
+
+  <div id="drop" tabindex="0">
+    <strong>Přetáhni soubor sem</strong>
+    <small>nebo klikni a vyber</small>
+    <div id="fileName"></div>
+    <input id="file" type="file" hidden>
+  </div>
+
+  <div>
+    <label for="seedText">…nebo hashuj text</label>
+    <input id="seedText" type="text" placeholder="libovolný text" value="etnetera">
+  </div>
+
+  <div>
+    <label>sha-256</label>
+    <div class="hash" id="hashOut">—</div>
+  </div>
+
+  <div>
+    <label for="layout">layout</label>
+    <select id="layout">
+      <option value="auto">auto (z hashe)</option>
+      <option value="vertical">vertical</option>
+      <option value="stacked">stacked</option>
+      <option value="minimal">minimal</option>
+    </select>
+  </div>
+
+  <div>
+    <label for="brand">název</label>
+    <input id="brand" type="text" value="etnetera">
+  </div>
+  <div>
+    <label for="headline">headline (stacked)</label>
+    <textarea id="headline">new
+era</textarea>
+  </div>
+  <div>
+    <label for="tagline">claim</label>
+    <input id="tagline" type="text" value="Be Bold.">
+  </div>
+
+  <label class="check"><input id="showHash" type="checkbox" checked> otisk hashe na plakátu</label>
+  <label class="check"><input id="animate" type="checkbox"> animovat proudění</label>
+
+  <div class="row">
+    <button id="export">Stáhnout PNG</button>
+    <button id="random" class="ghost">Náhodně</button>
+  </div>
+
+  <details>
+    <summary>parametry z hashe</summary>
+    <pre id="params"></pre>
+  </details>
+</aside>
+
+<main>
+  <canvas id="poster"></canvas>
+  <canvas id="gl"></canvas>
+</main>
+
+<script>
+// ---------- shader ----------
+const VERT = `
+attribute vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+const FRAG = `
+precision highp float;
+uniform vec2  uRes;
+uniform float uTime;
+uniform vec4  uSeedA, uSeedB, uSeedC;
+uniform float uScale, uWarp, uAngle, uAniso;
+uniform float uMode, uT1, uT2, uFLo, uFHi, uSpec, uBump, uOct;
+uniform vec3  uCLime, uCLimeHi, uCLav, uCLavHi, uCDark, uCSlate;
+uniform vec3  uLight;
+
+vec2 grad(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  return mix(mix(dot(grad(i),                f),
+                 dot(grad(i + vec2(1, 0)),   f - vec2(1, 0)), u.x),
+             mix(dot(grad(i + vec2(0, 1)),   f - vec2(0, 1)),
+                 dot(grad(i + vec2(1, 1)),   f - vec2(1, 1)), u.x), u.y);
+}
+float fbm(vec2 p) {
+  const mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  float s = 0.0, a = 0.6;
+  for (int i = 0; i < 6; i++) {
+    if (float(i) >= uOct) break;
+    s += a * noise(p);
+    p = m * p;
+    a *= 0.42;
+  }
+  return s;
+}
+
+// domain-warped field; returns f, writes warp vectors
+float field(vec2 sp, out vec2 q, out vec2 r) {
+  float c = cos(uAngle), s = sin(uAngle);
+  vec2 p = mat2(c, -s, s, c) * sp;
+  p.x /= uAniso;               // stretch along x -> streaks
+  p *= uScale;
+  float t = uTime * 0.05;
+  q = vec2(fbm(p + uSeedA.xy + t), fbm(p + uSeedA.zw - t));
+  r = vec2(fbm(p + uWarp * q + uSeedB.xy + 0.7 * t),
+           fbm(p + uWarp * q + uSeedB.zw - 0.6 * t));
+  return fbm(p + uWarp * r + uSeedC.xy);
+}
+
+float hash12(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
+
+void main() {
+  vec2 sp = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
+  vec2 uv = gl_FragCoord.xy / uRes;
+
+  vec2 q, r, q2, r2;
+  float e = 2.0 / uRes.y;
+  float f  = field(sp, q, r);
+  // ramp driver: mixes the height with the second warp layer
+  float g = 0.65 * f + 0.45 * r.y + 0.15 * q.x;
+  float hv = f + 0.3 * r.x;
+
+  if (uMode < 0.5) {
+    // analysis pass: encode g (16 bit) and hv (8 bit)
+    float gn = clamp(g * 0.25 + 0.5, 0.0, 0.99999);
+    float hn = clamp(hv * 0.25 + 0.5, 0.0, 1.0);
+    gl_FragColor = vec4(floor(gn * 255.0) / 255.0, fract(gn * 255.0), hn, 1.0);
+    return;
+  }
+  float fx = field(sp + vec2(e, 0.0), q2, r2);
+  float fy = field(sp + vec2(0.0, e), q2, r2);
+
+  // normal of the "silk" height field
+  vec3 n = normalize(vec3(-(fx - f) / e * uBump, -(fy - f) / e * uBump, 1.0));
+  vec3 L = normalize(uLight);
+  vec3 V = vec3(0.0, 0.0, 1.0);
+  float diff = clamp(dot(n, L), 0.0, 1.0);
+  float spec = pow(max(dot(reflect(-L, n), V), 0.0), 10.0);
+  float rim  = pow(1.0 - n.z, 1.5);
+
+  float d = max(uT2 - uT1, 0.02);
+
+  // lavender base, shaded by height
+  float h = smoothstep(uFLo, uFHi, hv);
+  vec3 col = mix(uCSlate, uCLav, h);
+  col = col * (0.6 + 0.6 * diff) + uCLavHi * spec * uSpec * 0.9;
+
+  // dark band in between
+  float darkM = smoothstep(uT1 - 1.0 * d, uT1 + 0.6 * d, g);
+  col = mix(col, uCDark * (0.75 + 0.4 * diff), darkM);
+
+  // lime ribbons
+  float limeM = smoothstep(uT2 - 0.5 * d, uT2 + 1.5 * d, g);
+  vec3 lime = mix(uCLime * vec3(0.42, 0.48, 0.3), uCLime, smoothstep(0.15, 0.95, diff + 0.12 * (g - uT2) / d));
+  lime = lime * (0.65 + 0.5 * diff) + uCLimeHi * spec * uSpec * 0.6;
+  col = mix(col, lime, limeM);
+
+  // soft occlusion in steep folds
+  col *= 1.0 - 0.35 * rim;
+
+  // vignette + grain
+  float vig = smoothstep(1.25, 0.35, length((uv - 0.5) * vec2(1.0, 1.25)));
+  col *= mix(0.8, 1.0, vig);
+  col += (hash12(gl_FragCoord.xy + uTime) - 0.5) * 0.035;
+
+  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}`;
+
+// ---------- WebGL setup ----------
+const glCanvas = document.getElementById('gl');
+const gl = glCanvas.getContext('webgl', { preserveDrawingBuffer: true, antialias: false });
+if (!gl) alert('WebGL není dostupné.');
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const U = {};
+const uniformNames = ['uRes', 'uTime', 'uSeedA', 'uSeedB', 'uSeedC', 'uScale', 'uWarp', 'uAngle',
+  'uAniso', 'uMode', 'uT1', 'uT2', 'uFLo', 'uFHi', 'uSpec', 'uBump', 'uOct', 'uCLime', 'uCLimeHi', 'uCLav', 'uCLavHi',
+  'uCDark', 'uCSlate', 'uLight'];
+for (const n of uniformNames) U[n] = gl.getUniformLocation(prog, n);
+
+// ---------- hash -> params ----------
+const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16) / 255);
+const lerp = (a, b, t) => a + (b - a) * t;
+const lerp3 = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
+
+function paramsFromHash(bytes) {
+  const u = i => bytes[i] / 255;
+  const u16 = i => (bytes[i] * 256 + bytes[i + 1]) / 65535;
+  const seeds = [];
+  for (let i = 0; i < 16; i += 2) seeds.push(u16(i) * 200 - 100);
+
+  // lavender hue: bluish ↔ violet
+  const lav = lerp3(hex('#8790d4'), hex('#9a8ccf'), u(25));
+  const lavHi = lerp3(hex('#c3c8f4'), hex('#d0c4f2'), u(25));
+  const lime = lerp3(hex('#bfe000'), hex('#d8f52a'), u(26));
+  const la = u(27) * Math.PI * 2;
+  const layouts = ['vertical', 'stacked', 'minimal'];
+
+  return {
+    seeds,
+    scale: lerp(0.8, 1.6, u(16)),
+    warp: lerp(2.2, 4.0, u(17)),
+    angle: u(18) * Math.PI,
+    aniso: u(19) < 0.45 ? lerp(1.0, 1.5, u(19) / 0.45) : lerp(1.8, 4.2, (u(19) - 0.45) / 0.55),
+    limeFrac: lerp(0.3, 0.55, u(20)),
+    darkFrac: lerp(0.1, 0.2, u(21)),
+    spec: lerp(0.35, 1.0, u(22)),
+    bump: lerp(0.045, 0.08, u(23)),
+    oct: 3 + Math.floor(u(24) * 1.99),
+    lav, lavHi, lime_c: lime,
+    limeHi: hex('#f0ff8a'),
+    darkC: lerp3(hex('#1c1f28'), hex('#262a36'), u(29)),
+    slate: lerp3(hex('#3a3f58'), hex('#4b4f70'), u(30)),
+    light: [Math.cos(la) * 0.6, Math.sin(la) * 0.6, 0.75],
+    layout: layouts[bytes[31] % 3],
+  };
+}
+
+// ---------- rendering ----------
+let P = null, hashHex = '', time = 0, animating = false;
+const poster = document.getElementById('poster');
+const ctx = poster.getContext('2d');
+
+function setUniforms(w, h, t, mode) {
+  const s = P.seeds;
+  gl.uniform2f(U.uRes, w, h);
+  gl.uniform1f(U.uTime, t);
+  gl.uniform1f(U.uMode, mode);
+  gl.uniform4f(U.uSeedA, s[0], s[1], s[2], s[3]);
+  gl.uniform4f(U.uSeedB, s[4], s[5], s[6], s[7]);
+  gl.uniform4f(U.uSeedC, s[2] * 0.37, s[5] * 0.53, 0, 0);
+  gl.uniform1f(U.uScale, P.scale);
+  gl.uniform1f(U.uWarp, P.warp);
+  gl.uniform1f(U.uAngle, P.angle);
+  gl.uniform1f(U.uAniso, P.aniso);
+  gl.uniform1f(U.uSpec, P.spec);
+  gl.uniform1f(U.uBump, P.bump);
+  gl.uniform1f(U.uOct, P.oct);
+  gl.uniform3fv(U.uCLime, P.lime_c);
+  gl.uniform3fv(U.uCLimeHi, P.limeHi);
+  gl.uniform3fv(U.uCLav, P.lav);
+  gl.uniform3fv(U.uCLavHi, P.lavHi);
+  gl.uniform3fv(U.uCDark, P.darkC);
+  gl.uniform3fv(U.uCSlate, P.slate);
+  gl.uniform3fv(U.uLight, P.light);
+}
+
+// Analysis pass: render the field small, read it back and derive
+// thresholds from percentiles so every poster has the same colour balance.
+const AW = 64, AH = 96;
+const analysisPx = new Uint8Array(AW * AH * 4);
+function calibrate(t) {
+  glCanvas.width = AW; glCanvas.height = AH;
+  gl.viewport(0, 0, AW, AH);
+  setUniforms(AW, AH, t, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.readPixels(0, 0, AW, AH, gl.RGBA, gl.UNSIGNED_BYTE, analysisPx);
+  const n = AW * AH, g = new Float32Array(n), hv = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const o = i * 4;
+    g[i] = ((analysisPx[o] + analysisPx[o + 1] / 255) / 255 - 0.5) * 4;
+    hv[i] = (analysisPx[o + 2] / 255 - 0.5) * 4;
+  }
+  g.sort(); hv.sort();
+  const pct = (a, q) => a[Math.min(n - 1, Math.floor(q * n))];
+  return {
+    t2: pct(g, 1 - P.limeFrac),
+    t1: pct(g, 1 - P.limeFrac - P.darkFrac),
+    fLo: pct(hv, 0.08),
+    fHi: pct(hv, 0.92),
+  };
+}
+
+function renderGL(w, h, t) {
+  const c = calibrate(t);
+  glCanvas.width = w; glCanvas.height = h;
+  gl.viewport(0, 0, w, h);
+  setUniforms(w, h, t, 1);
+  gl.uniform1f(U.uT1, c.t1);
+  gl.uniform1f(U.uT2, c.t2);
+  gl.uniform1f(U.uFLo, c.fLo);
+  gl.uniform1f(U.uFHi, c.fHi);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+const $ = id => document.getElementById(id);
+const LIME = '#d4f21a', WHITE = '#eef0e8';
+
+function fitFont(c, text, weight, maxW, startPx) {
+  let px = startPx;
+  c.font = `${weight} ${px}px Outfit`;
+  const w = c.measureText(text).width;
+  if (w > maxW) px *= maxW / w;
+  c.font = `${weight} ${px}px Outfit`;
+  return px;
+}
+
+function drawTypography(c, W, H) {
+  const layout = $('layout').value === 'auto' ? P.layout : $('layout').value;
+  const brand = $('brand').value.trim();
+  const tagline = $('tagline').value.trim();
+  const m = W * 0.065;
+  c.textBaseline = 'alphabetic';
+
+  if (layout === 'vertical') {
+    c.save();
+    c.fillStyle = LIME;
+    const px = fitFont(c, brand, 500, H * 0.66, W * 0.24);
+    c.translate(W * 0.47 + px * 0.36, H * 0.86);
+    c.rotate(-Math.PI / 2);
+    c.shadowColor = 'rgba(20, 22, 30, 0.45)';
+    c.shadowBlur = px * 0.25;
+    c.fillText(brand, 0, 0);
+    c.restore();
+  }
+
+  if (layout === 'stacked') {
+    const lines = $('headline').value.split('\n').map(s => s.trim()).filter(Boolean);
+    c.fillStyle = WHITE;
+    let px = W * 0.24;
+    c.font = `700 ${px}px Outfit`;
+    const widest = Math.max(1, ...lines.map(l => c.measureText(l).width));
+    if (widest > W * 0.72) px *= (W * 0.72) / widest;
+    c.font = `700 ${px}px Outfit`;
+    c.letterSpacing = `${-px * 0.03}px`;
+    const x = W * 0.15;
+    let y = H * 0.42 - (lines.length - 2) * px * 0.42;
+    for (const l of lines) { c.fillText(l, x, y); y += px * 0.86; }
+    c.letterSpacing = '0px';
+    if (brand) {
+      fitFont(c, brand, 300, W * 0.72, px * 0.5);
+      c.fillText(brand, x + px * 0.02, y + px * 0.02);
+    }
+  }
+
+  // logo / ampersand
+  if (layout === 'stacked') {
+    c.fillStyle = WHITE;
+    const px = W * 0.038;
+    c.font = `500 ${px * 1.4}px Outfit`;
+    const ampW = c.measureText('&').width;
+    c.font = `500 ${px}px Outfit`;
+    const bw = c.measureText(brand).width;
+    const total = ampW + px * 0.25 + bw;
+    const x0 = (W - total) / 2, y0 = H - m * 1.2;
+    c.font = `500 ${px * 1.4}px Outfit`;
+    c.fillText('&', x0, y0 + px * 0.12);
+    c.font = `500 ${px}px Outfit`;
+    c.fillText(brand, x0 + ampW + px * 0.25, y0);
+  } else {
+    c.fillStyle = LIME;
+    c.font = `500 ${W * 0.06}px Outfit`;
+    c.fillText('&', m, H - m);
+    if (tagline) {
+      c.font = `700 ${W * 0.026}px Outfit`;
+      c.textAlign = 'right';
+      c.fillText(tagline, W - m, H - m);
+      c.textAlign = 'left';
+    }
+  }
+
+  if ($('showHash').checked && hashHex) {
+    c.save();
+    c.globalAlpha = 0.7;
+    c.fillStyle = layout === 'stacked' ? WHITE : LIME;
+    c.font = `400 ${W * 0.0135}px "JetBrains Mono"`;
+    c.textAlign = 'right';
+    c.fillText('SHA-256', W - m, m * 0.9);
+    c.fillText(hashHex.slice(0, 32), W - m, m * 0.9 + W * 0.02);
+    c.fillText(hashHex.slice(32), W - m, m * 0.9 + W * 0.04);
+    c.restore();
+  }
+}
+
+function compose(canvas, W, H, t) {
+  renderGL(W, H, t);
+  canvas.width = W; canvas.height = H;
+  const c = canvas.getContext('2d');
+  c.drawImage(glCanvas, 0, 0);
+  drawTypography(c, W, H);
+}
+
+function previewSize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const h = Math.round(poster.getBoundingClientRect().height * dpr) || 1200;
+  return [Math.round(h * 2 / 3), h];
+}
+
+function draw() {
+  if (!P) return;
+  const [W, H] = animating ? previewSize().map(v => Math.round(v * 0.6)) : previewSize();
+  compose(poster, W, H, time);
+}
+
+function loop() {
+  if (!animating) return;
+  time += 1 / 60;
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// ---------- input ----------
+async function useBytes(buffer, label) {
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
+  hashHex = [...digest].map(b => b.toString(16).padStart(2, '0')).join('');
+  P = paramsFromHash(digest);
+  $('hashOut').textContent = hashHex;
+  $('fileName').textContent = label || '';
+  $('params').textContent = JSON.stringify({
+    layout: P.layout, scale: +P.scale.toFixed(2), warp: +P.warp.toFixed(2),
+    angle_deg: Math.round(P.angle * 180 / Math.PI), anisotropy: +P.aniso.toFixed(2),
+    mode: P.aniso > 1.6 ? 'streak' : 'swirl', lime: +P.limeFrac.toFixed(2), dark: +P.darkFrac.toFixed(2),
+    gloss: +P.spec.toFixed(2), relief: +P.bump.toFixed(3), octaves: P.oct,
+  }, null, 2);
+  draw();
+}
+
+const drop = $('drop'), fileInput = $('file');
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+fileInput.addEventListener('change', async () => {
+  const f = fileInput.files[0];
+  if (f) useBytes(await f.arrayBuffer(), `${f.name} · ${(f.size / 1024).toFixed(1)} kB`);
+});
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', async e => {
+  const f = e.dataTransfer.files[0];
+  if (f) useBytes(await f.arrayBuffer(), `${f.name} · ${(f.size / 1024).toFixed(1)} kB`);
+});
+// whole window accepts drops too
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', async e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f && !drop.contains(e.target)) useBytes(await f.arrayBuffer(), `${f.name} · ${(f.size / 1024).toFixed(1)} kB`);
+});
+
+$('seedText').addEventListener('input', e => useBytes(new TextEncoder().encode(e.target.value), ''));
+['brand', 'headline', 'tagline', 'layout', 'showHash'].forEach(id => $(id).addEventListener('input', draw));
+$('animate').addEventListener('change', e => {
+  animating = e.target.checked;
+  if (animating) loop(); else draw();
+});
+$('random').addEventListener('click', () => {
+  const r = crypto.getRandomValues(new Uint8Array(64));
+  $('seedText').value = '';
+  useBytes(r, 'náhodná data (64 B)');
+});
+$('export').addEventListener('click', () => {
+  if (!P) return;
+  const out = document.createElement('canvas');
+  compose(out, 2400, 3600, time);
+  out.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = `fluid-poster-${hashHex.slice(0, 12)}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }, 'image/png');
+  draw();
+});
+let rt;
+window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw, 120); });
+
+// initial
+Promise.all([
+  document.fonts.load('300 40px Outfit'), document.fonts.load('500 40px Outfit'),
+  document.fonts.load('700 40px Outfit'), document.fonts.load('400 20px "JetBrains Mono"'),
+]).catch(() => {}).finally(() => {
+  if (location.hash.length > 1) $('seedText').value = decodeURIComponent(location.hash.slice(1));
+  useBytes(new TextEncoder().encode($('seedText').value), '');
+});
+</script>
+</body>
+</html>
