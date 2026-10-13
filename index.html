@@ -25,7 +25,9 @@
     font: 14px/1.45 "Outfit", system-ui, sans-serif;
     display: grid;
     grid-template-columns: 340px 1fr;
-    min-height: 100vh;
+    grid-template-rows: 100vh;
+    height: 100vh;
+    overflow: hidden;
   }
   aside {
     background: var(--panel);
@@ -86,26 +88,34 @@
   button:hover { filter: brightness(1.08); }
   .check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; text-transform: none; margin: 0; }
   details { color: var(--muted); font-size: 12px; }
+  details.tune { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  details.tune summary { color: var(--text); font-size: 14px; font-weight: 500; cursor: pointer; }
+  .group { margin-top: 14px; color: var(--lime); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .slider { margin-top: 10px; }
+  .slider .lbl { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+  .slider .lbl b { font: 400 11px "JetBrains Mono", monospace; color: var(--text); }
+  .slider.changed .lbl span::after { content: " •"; color: var(--lime); }
+  input[type=range] { width: 100%; accent-color: var(--lime); margin: 0; }
+  .tune .row { margin-top: 10px; }
+  .tune button { margin-top: 14px; width: 100%; padding: 8px; font-size: 13px; }
   details pre { font: 11px/1.5 "JetBrains Mono", monospace; white-space: pre-wrap; margin: 8px 0 0; }
   main {
     display: grid;
     place-items: center;
     padding: 32px;
     overflow: hidden;
+    min-height: 0;
   }
   #poster {
-    height: min(calc(100vh - 64px), 150vw);
-    max-width: 100%;
-    aspect-ratio: 2 / 3;
     box-shadow: 0 30px 80px rgba(0,0,0,.55);
     border-radius: 2px;
   }
   #gl { display: none; }
   @media (max-width: 820px) {
-    body { grid-template-columns: 1fr; }
+    body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; height: auto; overflow: visible; }
+    main { order: -1; min-width: 0; }
     aside { border-right: 0; border-bottom: 1px solid var(--line); }
     main { padding: 16px; }
-    #poster { height: auto; width: 100%; }
   }
 </style>
 </head>
@@ -156,6 +166,34 @@ era</textarea>
 
   <label class="check"><input id="showHash" type="checkbox"> otisk hashe na plakátu</label>
   <label class="check"><input id="animate" type="checkbox"> animovat proudění</label>
+
+  <details class="tune" open>
+    <summary>Úpravy</summary>
+    <div class="row">
+      <div>
+        <label for="format">formát</label>
+        <select id="format">
+          <option value="2:3">2:3 plakát</option>
+          <option value="3:4">3:4</option>
+          <option value="4:5">4:5 Instagram</option>
+          <option value="1:1">1:1</option>
+          <option value="9:16">9:16 story</option>
+          <option value="16:9">16:9 slide</option>
+        </select>
+      </div>
+      <div>
+        <label for="textColor">barva textu</label>
+        <select id="textColor">
+          <option value="auto">auto</option>
+          <option value="lime">limetková</option>
+          <option value="white">bílá</option>
+          <option value="dark">tmavá</option>
+        </select>
+      </div>
+    </div>
+    <div id="sliders"></div>
+    <button id="resetTune" class="ghost">Vrátit hodnoty z hashe</button>
+  </details>
 
   <div class="row">
     <button id="export">Stáhnout PNG</button>
@@ -332,11 +370,6 @@ function paramsFromHash(bytes) {
   const seeds = [];
   for (let i = 0; i < 16; i += 2) seeds.push(u16(i) * 200 - 100);
 
-  // lavender hue: bluish ↔ violet
-  const lav = lerp3(hex('#8790d4'), hex('#9a8ccf'), u(25));
-  const lavHi = lerp3(hex('#c3c8f4'), hex('#d0c4f2'), u(25));
-  const lime = lerp3(hex('#bfe000'), hex('#d8f52a'), u(26));
-  const la = u(27) * Math.PI * 2;
   const layouts = ['vertical', 'stacked', 'minimal'];
 
   return {
@@ -350,13 +383,91 @@ function paramsFromHash(bytes) {
     spec: lerp(0.35, 1.0, u(22)),
     bump: lerp(0.045, 0.08, u(23)),
     oct: 3 + Math.floor(u(24) * 1.99),
-    lav, lavHi, lime_c: lime,
+    lavT: u(25),
+    limeT: u(26),
+    lightDeg: u(27) * 360,
+    variation: 0,
+    speed: 1,
+    textSize: 1,
     limeHi: hex('#f0ff8a'),
     darkC: lerp3(hex('#1c1f28'), hex('#262a36'), u(29)),
     slate: lerp3(hex('#3a3f58'), hex('#4b4f70'), u(30)),
-    light: [Math.cos(la) * 0.6, Math.sin(la) * 0.6, 0.75],
     layout: layouts[bytes[31] % 3],
   };
+}
+
+// ---------- manual controls ----------
+const SLIDERS = [
+  { group: 'tvar' },
+  { key: 'variation', label: 'variace', min: 0, max: 100, step: 1, fmt: v => v },
+  { key: 'scale', label: 'zoom', min: 0.4, max: 2.6, step: 0.01, fmt: v => v.toFixed(2) },
+  { key: 'warp', label: 'turbulence', min: 0.5, max: 6.5, step: 0.05, fmt: v => v.toFixed(2) },
+  { key: 'angle', label: 'směr proudění', min: 0, max: Math.PI, step: 0.01, fmt: v => Math.round(v * 180 / Math.PI) + '°' },
+  { key: 'aniso', label: 'víry ↔ pruhy', min: 1, max: 5, step: 0.05, fmt: v => v.toFixed(2) },
+  { key: 'oct', label: 'detail', min: 2, max: 6, step: 1, fmt: v => v },
+  { group: 'barvy' },
+  { key: 'limeFrac', label: 'limetka', min: 0.1, max: 0.75, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
+  { key: 'darkFrac', label: 'tmavý pás', min: 0, max: 0.35, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
+  { key: 'limeT', label: 'odstín limetky', min: 0, max: 1, step: 0.01, fmt: v => v < 0.5 ? 'zelenější' : 'žlutější' },
+  { key: 'lavT', label: 'odstín levandule', min: 0, max: 1, step: 0.01, fmt: v => v < 0.5 ? 'modřejší' : 'fialovější' },
+  { group: 'světlo' },
+  { key: 'spec', label: 'lesk', min: 0, max: 1.6, step: 0.01, fmt: v => v.toFixed(2) },
+  { key: 'bump', label: 'reliéf', min: 0, max: 0.16, step: 0.002, fmt: v => v.toFixed(3) },
+  { key: 'lightDeg', label: 'směr světla', min: 0, max: 360, step: 1, fmt: v => Math.round(v) + '°' },
+  { group: 'ostatní' },
+  { key: 'textSize', label: 'velikost textu', min: 0.5, max: 1.5, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
+  { key: 'speed', label: 'rychlost animace', min: 0.1, max: 4, step: 0.05, fmt: v => v.toFixed(2) + '×' },
+];
+let BASE = null;
+const overrides = {};
+
+function buildSliders() {
+  const root = $('sliders');
+  for (const d of SLIDERS) {
+    if (d.group) {
+      root.insertAdjacentHTML('beforeend', `<div class="group">${d.group}</div>`);
+      continue;
+    }
+    const el = document.createElement('div');
+    el.className = 'slider';
+    el.innerHTML = `<div class="lbl"><span>${d.label}</span><b></b></div>
+      <input type="range" min="${d.min}" max="${d.max}" step="${d.step}" aria-label="${d.label}">`;
+    d.el = el; d.input = el.querySelector('input'); d.out = el.querySelector('b');
+    d.input.addEventListener('input', () => {
+      overrides[d.key] = +d.input.value;
+      applyControls();
+      draw();
+    });
+    root.appendChild(el);
+  }
+}
+
+function syncSliders() {
+  for (const d of SLIDERS) {
+    if (d.group) continue;
+    const v = P[d.key];
+    d.input.value = v;
+    d.out.textContent = d.fmt(v);
+    d.el.classList.toggle('changed', d.key in overrides);
+  }
+}
+
+// effective params = hash params + manual overrides, with derived colours
+function applyControls() {
+  if (!BASE) return;
+  P = { ...BASE, ...overrides };
+  P.seeds = BASE.seeds.map((v, i) => v + P.variation * (0.37 + 0.11 * i));
+  P.lav = lerp3(hex('#8790d4'), hex('#9a8ccf'), P.lavT);
+  P.lavHi = lerp3(hex('#c3c8f4'), hex('#d0c4f2'), P.lavT);
+  P.lime_c = lerp3(hex('#b4e000'), hex('#e0f530'), P.limeT);
+  const la = P.lightDeg * Math.PI / 180;
+  P.light = [Math.cos(la) * 0.6, Math.sin(la) * 0.6, 0.75];
+  syncSliders();
+}
+
+function aspect() {
+  const [a, b] = $('format').value.split(':').map(Number);
+  return a / b;
 }
 
 // ---------- rendering ----------
@@ -427,7 +538,7 @@ function renderGL(w, h, t) {
 }
 
 const $ = id => document.getElementById(id);
-const LIME = '#d4f21a', WHITE = '#eef0e8';
+const LIME = '#d4f21a', WHITE = '#eef0e8', DARK = '#1c1f28';
 
 function fitFont(c, text, weight, maxW, startPx) {
   let px = startPx;
@@ -442,31 +553,36 @@ function drawTypography(c, W, H) {
   const layout = $('layout').value === 'auto' ? P.layout : $('layout').value;
   const brand = $('brand').value.trim();
   const tagline = $('tagline').value.trim();
-  const m = W * 0.065;
+  // size unit that works for any aspect ratio (equals W on a 2:3 poster)
+  const S = Math.min(W, H / 1.5);
+  const ts = P.textSize;
+  const m = S * 0.065;
+  const pick = { lime: LIME, white: WHITE, dark: DARK }[$('textColor').value];
+  const main = pick || (layout === 'stacked' ? WHITE : LIME);
+  const accent = pick || LIME;
   c.textBaseline = 'alphabetic';
 
   if (layout === 'vertical') {
     c.save();
-    c.fillStyle = LIME;
-    const px = fitFont(c, brand, 500, H * 0.66, W * 0.24);
-    c.translate(W * 0.47 + px * 0.36, H * 0.86);
+    c.fillStyle = main;
+    const px = fitFont(c, brand, 500, H * 0.66 * ts, S * 0.24 * ts);
+    c.translate(W * 0.47 + px * 0.36, H / 2 + Math.min(H * 0.36, c.measureText(brand).width / 2));
     c.rotate(-Math.PI / 2);
-    c.shadowColor = 'rgba(20, 22, 30, 0.45)';
-    c.shadowBlur = px * 0.25;
+    if (main !== DARK) { c.shadowColor = 'rgba(20, 22, 30, 0.45)'; c.shadowBlur = px * 0.25; }
     c.fillText(brand, 0, 0);
     c.restore();
   }
 
   if (layout === 'stacked') {
     const lines = $('headline').value.split('\n').map(s => s.trim()).filter(Boolean);
-    c.fillStyle = WHITE;
-    let px = W * 0.24;
+    c.fillStyle = main;
+    let px = S * 0.24 * ts;
     c.font = `700 ${px}px Outfit`;
     const widest = Math.max(1, ...lines.map(l => c.measureText(l).width));
     if (widest > W * 0.72) px *= (W * 0.72) / widest;
     c.font = `700 ${px}px Outfit`;
     c.letterSpacing = `${-px * 0.03}px`;
-    const x = W * 0.15;
+    const x = Math.max(W * 0.15, (W - widest * px / (S * 0.24 * ts)) / 2 - W * 0.1 * (W > H));
     let y = H * 0.42 - (lines.length - 2) * px * 0.42;
     for (const l of lines) { c.fillText(l, x, y); y += px * 0.86; }
     c.letterSpacing = '0px';
@@ -478,8 +594,8 @@ function drawTypography(c, W, H) {
 
   // logo / ampersand
   if (layout === 'stacked') {
-    c.fillStyle = WHITE;
-    const px = W * 0.038;
+    c.fillStyle = main;
+    const px = S * 0.038;
     c.font = `500 ${px * 1.4}px Outfit`;
     const ampW = c.measureText('&').width;
     c.font = `500 ${px}px Outfit`;
@@ -491,11 +607,11 @@ function drawTypography(c, W, H) {
     c.font = `500 ${px}px Outfit`;
     c.fillText(brand, x0 + ampW + px * 0.25, y0);
   } else {
-    c.fillStyle = LIME;
-    c.font = `500 ${W * 0.06}px Outfit`;
+    c.fillStyle = accent;
+    c.font = `500 ${S * 0.06}px Outfit`;
     c.fillText('&', m, H - m);
     if (tagline) {
-      c.font = `700 ${W * 0.026}px Outfit`;
+      c.font = `700 ${S * 0.026}px Outfit`;
       c.textAlign = 'right';
       c.fillText(tagline, W - m, H - m);
       c.textAlign = 'left';
@@ -505,12 +621,12 @@ function drawTypography(c, W, H) {
   if ($('showHash').checked && hashHex) {
     c.save();
     c.globalAlpha = 0.7;
-    c.fillStyle = layout === 'stacked' ? WHITE : LIME;
-    c.font = `400 ${W * 0.0135}px "JetBrains Mono"`;
+    c.fillStyle = main;
+    c.font = `400 ${S * 0.0135}px "JetBrains Mono"`;
     c.textAlign = 'right';
     c.fillText('SHA-256', W - m, m * 0.9);
-    c.fillText(hashHex.slice(0, 32), W - m, m * 0.9 + W * 0.02);
-    c.fillText(hashHex.slice(32), W - m, m * 0.9 + W * 0.04);
+    c.fillText(hashHex.slice(0, 32), W - m, m * 0.9 + S * 0.02);
+    c.fillText(hashHex.slice(32), W - m, m * 0.9 + S * 0.04);
     c.restore();
   }
 }
@@ -523,10 +639,19 @@ function compose(canvas, W, H, t) {
   drawTypography(c, W, H);
 }
 
+// fit the poster box into the free area of <main>, keeping the chosen aspect
 function previewSize() {
+  const main = poster.parentElement, cs = getComputedStyle(main);
+  const availW = main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const narrow = window.innerWidth <= 820;
+  const availH = narrow ? Infinity : main.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const ar = aspect();
+  let w = availW, h = w / ar;
+  if (h > availH) { h = availH; w = h * ar; }
+  poster.style.width = `${Math.round(w)}px`;
+  poster.style.height = `${Math.round(h)}px`;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const h = Math.round(poster.getBoundingClientRect().height * dpr) || 1200;
-  return [Math.round(h * 2 / 3), h];
+  return [Math.round(w * dpr), Math.round(h * dpr)];
 }
 
 function draw() {
@@ -537,7 +662,7 @@ function draw() {
 
 function loop() {
   if (!animating) return;
-  time += 1 / 60;
+  time += P.speed / 60;
   draw();
   requestAnimationFrame(loop);
 }
@@ -546,7 +671,8 @@ function loop() {
 async function useBytes(buffer, label) {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', buffer));
   hashHex = [...digest].map(b => b.toString(16).padStart(2, '0')).join('');
-  P = paramsFromHash(digest);
+  BASE = paramsFromHash(digest);
+  applyControls();
   $('hashOut').textContent = hashHex;
   $('fileName').textContent = label || '';
   $('params').textContent = JSON.stringify({
@@ -593,7 +719,8 @@ $('random').addEventListener('click', () => {
 $('export').addEventListener('click', () => {
   if (!P) return;
   const out = document.createElement('canvas');
-  compose(out, 2400, 3600, time);
+  const ar = aspect(), L = 3600;
+  compose(out, Math.round(ar >= 1 ? L : L * ar), Math.round(ar >= 1 ? L / ar : L), time);
   out.toBlob(b => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(b);
@@ -603,6 +730,15 @@ $('export').addEventListener('click', () => {
   }, 'image/png');
   draw();
 });
+$('format').addEventListener('input', draw);
+$('textColor').addEventListener('input', draw);
+$('resetTune').addEventListener('click', () => {
+  for (const k in overrides) delete overrides[k];
+  applyControls();
+  draw();
+});
+buildSliders();
+
 let rt;
 window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw, 120); });
 
