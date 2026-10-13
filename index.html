@@ -46,6 +46,18 @@
     overflow-y: auto;
   }
   h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; position: relative; }
+  .toolbar { display: flex; gap: 3px; align-items: center; }
+  .toolbar button { background: transparent; color: var(--text); border: 1px solid var(--line); padding: 4px 8px; font-size: 13px; border-radius: 7px; }
+  .toolbar button:disabled { opacity: .35; filter: none; }
+  #saved { position: absolute; right: 0; top: -18px; color: var(--muted); font-size: 11px; transition: opacity .4s; }
+  #help { position: fixed; inset: 0; background: rgba(8, 9, 12, .7); display: grid; place-items: center; z-index: 10; }
+  #help > div { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 26px; width: min(440px, calc(100vw - 32px)); }
+  #help h2 { margin: 0 0 12px; font-size: 17px; }
+  #help dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; margin: 0; font-size: 13px; }
+  #help dt { text-align: right; }
+  #help dd { margin: 0; color: var(--muted); }
+  kbd { font: 500 11px "JetBrains Mono", monospace; background: #0f1115; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; color: var(--text); }
   h1 span { color: var(--lime); }
   label { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; text-transform: lowercase; }
   input[type=text], textarea, select {
@@ -135,6 +147,7 @@
   #layerEditor .check { margin-top: 24px; }
   .rotq { display: flex; gap: 6px; margin-top: 6px; }
   .tune .rotq button { margin-top: 0; padding: 5px; font-size: 12px; }
+  .tune .aligns button { font-size: 15px; padding: 3px; }
   #poster { touch-action: none; }
   details pre { font: 11px/1.5 "JetBrains Mono", monospace; white-space: pre-wrap; margin: 8px 0 0; }
   main {
@@ -159,7 +172,16 @@
 </head>
 <body>
 <aside>
-  <h1>fluid<span>/</span>poster</h1>
+  <div class="top">
+    <h1>fluid<span>/</span>poster</h1>
+    <div class="toolbar">
+      <span id="saved"></span>
+      <button id="undo" title="Zpět" aria-label="Zpět">↶</button>
+      <button id="redo" title="Vpřed" aria-label="Vpřed">↷</button>
+      <button id="newDoc" title="Nový plakát">nový</button>
+      <button id="helpBtn" title="Klávesové zkratky (?)" aria-label="Klávesové zkratky">?</button>
+    </div>
+  </div>
 
   <div class="seg" role="tablist" aria-label="zdroj hashe">
     <button id="srcFile" role="tab" aria-selected="false">Soubor</button>
@@ -269,9 +291,20 @@
         <button class="ghost" data-rot="-90">−90°</button>
         <button class="ghost" data-rot="0">0°</button>
         <button class="ghost" data-rot="90">90°</button>
-        <button class="ghost" data-center="x">na střed ↔</button>
-        <button class="ghost" data-center="y">na střed ↕</button>
       </div>
+      <div>
+        <label for="alignRef">zarovnat vzhledem k</label>
+        <select id="alignRef"></select>
+        <div class="rotq aligns">
+          <button class="ghost" data-align="l" title="Doleva">⇤</button>
+          <button class="ghost" data-align="cx" title="Na střed vodorovně">↔</button>
+          <button class="ghost" data-align="r" title="Doprava">⇥</button>
+          <button class="ghost" data-align="t" title="Nahoru">⤒</button>
+          <button class="ghost" data-align="cy" title="Na střed svisle">↕</button>
+          <button class="ghost" data-align="b" title="Dolů">⤓</button>
+        </div>
+      </div>
+      <label class="check" style="margin-top:0"><input id="snap" type="checkbox" checked> přichytávat a ukazovat vzdálenosti</label>
     </div>
   </details>
 
@@ -327,6 +360,13 @@
     <pre id="params"></pre>
   </details>
 </aside>
+
+<div id="help" class="hidden" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div>
+    <h2 id="helpTitle">Klávesové zkratky</h2>
+    <dl id="helpList"></dl>
+  </div>
+</div>
 
 <main>
   <canvas id="poster"></canvas>
@@ -782,6 +822,101 @@ function drawSelection(c, W, H) {
   c.restore();
 }
 
+// axis-aligned bounding box of a (possibly rotated) layer, in canvas px
+function layerBox(L, W, H) {
+  const m = layerMetrics(ctx, L, W, H);
+  const a = L.rot * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const xs = [], ys = [];
+  for (const [px, py] of [[m.x0, -m.h / 2], [m.x0 + m.w, -m.h / 2], [m.x0, m.h / 2], [m.x0 + m.w, m.h / 2]]) {
+    xs.push(L.x * W + px * cos - py * sin);
+    ys.push(L.y * H + px * sin + py * cos);
+  }
+  const l = Math.min(...xs), r = Math.max(...xs), t = Math.min(...ys), b = Math.max(...ys);
+  return { l, r, t, b, cx: (l + r) / 2, cy: (t + b) / 2 };
+}
+const MARGIN = 0.065;
+const marginPx = (W, H) => Math.min(W, H / 1.5) * MARGIN;
+let guides = { x: [], y: [] }, showMeasure = false;
+
+// snap the selected layer's edges / centre to the poster, margins and other layers
+function snapLayer(i, W, H, thresholdPx) {
+  const L = LAYERS[i], B = layerBox(L, W, H), m = marginPx(W, H);
+  const tx = [0, m, W / 2, W - m, W], ty = [0, m, H / 2, H - m, H];
+  LAYERS.forEach((O, k) => {
+    if (k === i) return;
+    const ob = layerBox(O, W, H);
+    tx.push(ob.l, ob.cx, ob.r);
+    ty.push(ob.t, ob.cy, ob.b);
+  });
+  const best = (targets, sources) => {
+    let hit = null;
+    for (const t of targets) for (const sv of sources) {
+      const d = t - sv;
+      if (Math.abs(d) <= thresholdPx && (!hit || Math.abs(d) < Math.abs(hit.d))) hit = { d, t };
+    }
+    return hit;
+  };
+  const sx = best(tx, [B.l, B.cx, B.r]), sy = best(ty, [B.t, B.cy, B.b]);
+  if (sx) L.x += sx.d / W;
+  if (sy) L.y += sy.d / H;
+  // collect every line the snapped box now touches
+  const B2 = layerBox(L, W, H), eps = 0.5;
+  guides = {
+    x: [...new Set(tx.filter(t => [B2.l, B2.cx, B2.r].some(v => Math.abs(v - t) < eps)).map(Math.round))],
+    y: [...new Set(ty.filter(t => [B2.t, B2.cy, B2.b].some(v => Math.abs(v - t) < eps)).map(Math.round))],
+  };
+}
+
+// gaps from the selected layer to the nearest neighbour (or poster edge) on each side
+function measureGaps(i, W, H) {
+  const B = layerBox(LAYERS[i], W, H);
+  const others = LAYERS.map((O, k) => (k === i ? null : layerBox(O, W, H))).filter(Boolean);
+  const vOverlap = o => o.t < B.b && o.b > B.t, hOverlap = o => o.l < B.r && o.r > B.l;
+  const left = Math.max(0, ...others.filter(o => vOverlap(o) && o.r <= B.l).map(o => o.r));
+  const right = Math.min(W, ...others.filter(o => vOverlap(o) && o.l >= B.r).map(o => o.l));
+  const top = Math.max(0, ...others.filter(o => hOverlap(o) && o.b <= B.t).map(o => o.b));
+  const bottom = Math.min(H, ...others.filter(o => hOverlap(o) && o.t >= B.b).map(o => o.t));
+  return { B, left, right, top, bottom };
+}
+
+function drawGuides(c, W, H) {
+  if (selected < 0 || !$('snap').checked) return;
+  const u = Math.max(1, W / 700), GC = '#ff4fd8';
+  c.save();
+  c.strokeStyle = GC;
+  c.lineWidth = u;
+  if (drag) {
+    for (const x of guides.x) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
+    for (const y of guides.y) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  }
+  if (drag || showMeasure) {
+    const g = measureGaps(selected, W, H), B = g.B;
+    const ar = aspect(), exportW = ar >= 1 ? 3600 : 3600 * ar, k = exportW / W;
+    const fs = 10 * u;
+    c.font = `600 ${fs}px "JetBrains Mono", monospace`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    const seg = (x1, y1, x2, y2) => {
+      const len = Math.hypot(x2 - x1, y2 - y1);
+      if (len < 2) return;
+      c.setLineDash([3 * u, 3 * u]);
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+      c.setLineDash([]);
+      const label = String(Math.round(len * k)), tw = c.measureText(label).width + 8 * u;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      c.fillStyle = GC;
+      c.beginPath(); c.roundRect(mx - tw / 2, my - fs * 0.8, tw, fs * 1.6, 3 * u); c.fill();
+      c.fillStyle = '#fff';
+      c.fillText(label, mx, my + 0.5 * u);
+    };
+    seg(g.left, B.cy, B.l, B.cy);
+    seg(B.r, B.cy, g.right, B.cy);
+    seg(B.cx, g.top, B.cx, B.t);
+    seg(B.cx, B.b, B.cx, g.bottom);
+  }
+  c.restore();
+}
+
 function hitLayer(nx, ny) {
   const W = poster.width, H = poster.height;
   for (let i = LAYERS.length - 1; i >= 0; i--) {
@@ -810,7 +945,7 @@ function drawTypography(c, W, H, preview) {
     c.fillText(hashHex.slice(32), W - m, m * 0.9 + S * 0.04);
     c.restore();
   }
-  if (preview) drawSelection(c, W, H);
+  if (preview) { drawGuides(c, W, H); drawSelection(c, W, H); }
 }
 
 // the fluid background only re-renders when its inputs change, so dragging
@@ -849,6 +984,7 @@ function draw() {
   if (!P) return;
   const [W, H] = animating ? previewSize().map(v => Math.round(v * 0.6)) : previewSize();
   compose(poster, W, H, time, true);
+  scheduleSnapshot();
 }
 
 function loop() {
@@ -863,7 +999,9 @@ async function useBytes(buffer, label) {
   useDigest(new Uint8Array(await crypto.subtle.digest('SHA-256', buffer)), label);
 }
 
+let currentLabel = '';
 function useDigest(digest, label) {
+  currentLabel = label || '';
   hashHex = [...digest].map(b => b.toString(16).padStart(2, '0')).join('');
   BASE = paramsFromHash(digest);
   if ($('layout').value === 'auto' && !layersEdited) { LAYERS = templateLayers('auto'); selected = -1; renderLayerList(); }
@@ -999,6 +1137,10 @@ function renderLayerList() {
   $('layerEditor').classList.toggle('hidden', !L);
   for (const id of ['dupLayer', 'upLayer', 'downLayer', 'delLayer']) $(id).disabled = !L;
   if (!L) return;
+  const prevRef = $('alignRef').value;
+  $('alignRef').innerHTML = '<option value="poster">plakát</option><option value="margin">okraje plakátu</option>' +
+    LAYERS.map((O, i) => (i === selected ? '' : `<option value="${i}">text: ${esc(O.text.split('\n')[0]).slice(0, 24) || '(prázdný)'}</option>`)).join('');
+  if ([...$('alignRef').options].some(o => o.value === prevRef)) $('alignRef').value = prevRef;
   if (document.activeElement !== $('lText')) $('lText').value = L.text;
   $('lFont').value = L.font;
   $('lWeight').value = String(L.weight);
@@ -1036,10 +1178,29 @@ $('lAccent').addEventListener('input', () => editLayer({ color: $('lAccent').che
 $('lAlign').addEventListener('input', () => editLayer({ align: $('lAlign').value }));
 $('lShadow').addEventListener('input', () => editLayer({ shadow: $('lShadow').checked }));
 document.querySelectorAll('[data-rot]').forEach(b => b.addEventListener('click', () => editLayer({ rot: +b.dataset.rot })));
-document.querySelectorAll('[data-center]').forEach(b => b.addEventListener('click', () => {
+document.querySelectorAll('[data-align]').forEach(b => b.addEventListener('click', () => {
   const L = LAYERS[selected];
-  if (L) editLayer({ [b.dataset.center]: 0.5, ...(b.dataset.center === 'x' && L.rot % 180 === 0 ? { align: 'center' } : {}) });
+  if (!L) return;
+  const W = poster.width, H = poster.height, B = layerBox(L, W, H), ref = $('alignRef').value, m = marginPx(W, H);
+  const R = ref === 'poster' ? { l: 0, r: W, t: 0, b: H }
+    : ref === 'margin' ? { l: m, r: W - m, t: m, b: H - m }
+    : layerBox(LAYERS[+ref], W, H);
+  R.cx = (R.l + R.r) / 2; R.cy = (R.t + R.b) / 2;
+  const k = b.dataset.align;
+  const dx = { l: R.l - B.l, cx: R.cx - B.cx, r: R.r - B.r }[k] ?? 0;
+  const dy = { t: R.t - B.t, cy: R.cy - B.cy, b: R.b - B.b }[k] ?? 0;
+  editLayer({ x: +(L.x + dx / W).toFixed(4), y: +(L.y + dy / H).toFixed(4) });
 }));
+$('snap').addEventListener('input', draw);
+// show gaps briefly after keyboard nudges, and while Alt is held
+let measureTimer = 0;
+function flashMeasure(ms = 900) {
+  showMeasure = true;
+  clearTimeout(measureTimer);
+  if (ms) measureTimer = setTimeout(() => { showMeasure = false; draw(); }, ms);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Alt' && selected >= 0) { flashMeasure(0); draw(); } });
+document.addEventListener('keyup', e => { if (e.key === 'Alt') { showMeasure = false; draw(); } });
 $('addLayer').addEventListener('click', () => {
   LAYERS.push(makeLayer({ text: 'nový text', color: WHITE, size: 0.09, weight: 700 }));
   layersEdited = true;
@@ -1090,7 +1251,7 @@ poster.addEventListener('pointerdown', e => {
   selectLayer(i);
   if (i < 0) return;
   drag = { dx: LAYERS[i].x - nx, dy: LAYERS[i].y - ny };
-  poster.setPointerCapture(e.pointerId);
+  try { poster.setPointerCapture(e.pointerId); } catch { /* synthetic events */ }
 });
 poster.addEventListener('pointermove', e => {
   const [nx, ny] = posterPoint(e);
@@ -1098,23 +1259,82 @@ poster.addEventListener('pointermove', e => {
     poster.style.cursor = hitLayer(nx, ny) >= 0 ? 'move' : '';
     return;
   }
-  editLayer({ x: +(nx + drag.dx).toFixed(4), y: +(ny + drag.dy).toFixed(4) });
+  const L = LAYERS[selected];
+  L.x = nx + drag.dx;
+  L.y = ny + drag.dy;
+  guides = { x: [], y: [] };
+  if ($('snap').checked && !(e.metaKey || e.ctrlKey)) {
+    const W = poster.width;
+    snapLayer(selected, W, poster.height, 7 * W / poster.getBoundingClientRect().width);
+  }
+  editLayer({ x: +L.x.toFixed(4), y: +L.y.toFixed(4) });
 });
-const endDrag = () => { drag = null; };
+const endDrag = () => { drag = null; guides = { x: [], y: [] }; draw(); };
 poster.addEventListener('pointerup', endDrag);
 poster.addEventListener('pointercancel', endDrag);
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const MOD = IS_MAC ? '⌘' : 'Ctrl';
+const SHORTCUTS = [
+  [`${MOD} Z`, 'zpět'],
+  [`${MOD} ⇧ Z / ${MOD} Y`, 'vpřed'],
+  [`${MOD} S`, 'stáhnout PNG'],
+  [`${MOD} D`, 'duplikovat text'],
+  [`${MOD} ⇧ C`, 'kopírovat odkaz'],
+  ['T', 'přidat text'],
+  ['R', 'náhodný plakát'],
+  ['A', 'zapnout / vypnout animaci'],
+  ['← ↑ → ↓', 'posunout text (⇧ víc)'],
+  ['Alt', 'držet = ukázat vzdálenosti'],
+  [`${MOD}`, 'držet při tažení = bez přichytávání'],
+  ['[  ]', 'text dozadu / dopředu'],
+  ['Delete', 'smazat text'],
+  ['Esc', 'zrušit výběr / zavřít'],
+  ['?', 'tato nápověda'],
+];
+$('helpList').innerHTML = SHORTCUTS.map(([k, d]) => `<dt>${k.split(' ').map(x => x === '/' ? '/' : `<kbd>${x}</kbd>`).join(' ')}</dt><dd>${d}</dd>`).join('');
+$('undo').title = `Zpět (${MOD}Z)`;
+$('redo').title = `Vpřed (⇧${MOD}Z)`;
+const toggleHelp = show => $('help').classList.toggle('hidden', !(show ?? $('help').classList.contains('hidden')));
+$('helpBtn').addEventListener('click', () => toggleHelp(true));
+$('help').addEventListener('click', e => { if (e.target === $('help')) toggleHelp(false); });
+
 document.addEventListener('keydown', e => {
-  if (selected < 0 || e.target.closest('input, textarea, select')) return;
+  const mod = e.metaKey || e.ctrlKey;
+  const el = e.target instanceof Element ? e.target : document.body;
+  const typing = !!el.closest('input[type=text], textarea');
+  const key = e.key.toLowerCase();
+
+  if (mod && key === 'z' && !typing) { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && key === 'y' && !typing) { e.preventDefault(); redo(); return; }
+  if (mod && key === 's') { e.preventDefault(); $('export').click(); return; }
+  if (mod && key === 'd') { e.preventDefault(); $('dupLayer').click(); return; }
+  if (mod && e.shiftKey && key === 'c') { e.preventDefault(); $('share').click(); return; }
+  if (e.key === 'Escape') {
+    if (!$('help').classList.contains('hidden')) toggleHelp(false);
+    else if (typing) el.blur();
+    else selectLayer(-1);
+    return;
+  }
+  if (mod || e.altKey || el.closest('input, textarea, select')) return;
+
+  if (e.key === '?') { e.preventDefault(); toggleHelp(); return; }
+  if (key === 't') { e.preventDefault(); $('addLayer').click(); return; }
+  if (key === 'r') { e.preventDefault(); $('random').click(); return; }
+  if (key === 'a') { e.preventDefault(); $('animate').click(); return; }
+  if (selected < 0) return;
   const step = e.shiftKey ? 0.02 : 0.004, L = LAYERS[selected];
   const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
   if (moves[e.key]) {
     e.preventDefault();
+    flashMeasure();
     editLayer({ x: +(L.x + moves[e.key][0]).toFixed(4), y: +(L.y + moves[e.key][1]).toFixed(4) });
   } else if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
     $('delLayer').click();
-  } else if (e.key === 'Escape') {
-    selectLayer(-1);
+  } else if (e.key === ']') {
+    $('upLayer').click();
+  } else if (e.key === '[') {
+    $('downLayer').click();
   }
 });
 buildLayerSliders();
@@ -1182,6 +1402,104 @@ window.renderPoster = (long = 1800, mime = 'image/png', quality = 0.92) => {
   compose(out, Math.round(ar >= 1 ? long : long * ar), Math.round(ar >= 1 ? long / ar : long), time);
   return out.toDataURL(mime, quality);
 };
+// ---------- history (undo / redo) + autosave ----------
+const STORE_KEY = 'fluidposter:v1';
+let hist = [], hIndex = -1, snapTimer = 0, restoring = false, ready = false;
+
+function getState() {
+  return {
+    source, seedText: $('seedText').value, sha: source === 'file' ? hashHex : '', fileLabel: currentLabel,
+    layout: $('layout').value, format: $('format').value, showHash: $('showHash').checked,
+    palette: $('palette').value, colors: { ...COLORS }, overrides: { ...overrides },
+    layers: LAYERS, layersEdited,
+  };
+}
+
+async function applyState(st) {
+  restoring = true;
+  try {
+    $('layout').value = st.layout || 'vertical';
+    $('format').value = st.format || '2:3';
+    $('showHash').checked = !!st.showHash;
+    $('palette').value = st.palette || '';
+    $('seedText').value = st.seedText ?? '';
+    for (const k in overrides) delete overrides[k];
+    Object.assign(overrides, st.overrides || {});
+    Object.assign(COLORS, { accent: null, second: null, dark: null }, st.colors || {});
+    await setSource(st.source === 'file' ? 'file' : 'text', false);
+    if (st.source === 'file' && /^[0-9a-f]{64}$/.test(st.sha || '')) {
+      useDigest(new Uint8Array(st.sha.match(/../g).map(h => parseInt(h, 16))), st.fileLabel || 'soubor');
+    } else {
+      await useBytes(new TextEncoder().encode($('seedText').value), '');
+    }
+    LAYERS = (st.layers || []).map(sanitizeLayer);
+    layersEdited = !!st.layersEdited;
+    selected = Math.min(selected, LAYERS.length - 1);
+    await ensureLayerFonts();
+    renderLayerList();
+    draw();
+  } finally {
+    restoring = false;
+  }
+}
+
+function updateHistoryButtons() {
+  $('undo').disabled = hIndex <= 0;
+  $('redo').disabled = hIndex >= hist.length - 1;
+}
+
+function snapshot() {
+  clearTimeout(snapTimer);
+  snapTimer = 0;
+  if (!ready || restoring) return;
+  const json = JSON.stringify(getState());
+  if (json === hist[hIndex]) return;
+  hist = hist.slice(0, hIndex + 1);
+  hist.push(json);
+  if (hist.length > 200) hist.shift();
+  hIndex = hist.length - 1;
+  updateHistoryButtons();
+  try {
+    localStorage.setItem(STORE_KEY, json);
+    $('saved').textContent = 'uloženo ✓';
+    $('saved').style.opacity = 1;
+    setTimeout(() => { $('saved').style.opacity = 0; }, 1200);
+  } catch { /* storage unavailable: hist still works for this session */ }
+}
+
+// changes are grouped: one step per pause, so a slider drag is a single undo
+function scheduleSnapshot() {
+  if (!ready || restoring || drag) return;
+  clearTimeout(snapTimer);
+  snapTimer = setTimeout(snapshot, 400);
+}
+
+async function undo() {
+  if (snapTimer) snapshot();
+  if (hIndex <= 0) return;
+  hIndex--;
+  updateHistoryButtons();
+  await applyState(JSON.parse(hist[hIndex]));
+  try { localStorage.setItem(STORE_KEY, hist[hIndex]); } catch {}
+}
+
+async function redo() {
+  if (hIndex >= hist.length - 1) return;
+  hIndex++;
+  updateHistoryButtons();
+  await applyState(JSON.parse(hist[hIndex]));
+  try { localStorage.setItem(STORE_KEY, hist[hIndex]); } catch {}
+}
+
+$('undo').addEventListener('click', undo);
+$('redo').addEventListener('click', redo);
+$('newDoc').addEventListener('click', async () => {
+  await applyState({ source: 'text', seedText: 'etnetera', layout: 'vertical', format: '2:3', layers: templateLayers('vertical') });
+  selectLayer(-1);
+  snapshot();
+});
+poster.addEventListener('pointerup', () => scheduleSnapshot());
+
 window.posterInfo = () => ({ sha256: hashHex, webgl: !!gl, params: P, share: shareUrl() });
 
 // initial
@@ -1212,9 +1530,17 @@ Promise.all([
     const extra = q.has('addLayers') ? JSON.parse(q.get('addLayers')) : [];
     if (Array.isArray(extra) && extra.length) { LAYERS.push(...extra.map(sanitizeLayer)); layersEdited = true; }
   } catch { /* ignore malformed addLayers */ }
+  let saved = null;
+  if (!location.search && location.hash.length <= 1) {
+    try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch { saved = null; }
+  }
+  if (saved) await applyState(saved);
   await ensureLayerFonts();
   renderLayerList();
   draw();
+  ready = true;
+  snapshot();
+  updateHistoryButtons();
   window.posterReady = true;
 });
 </script>
