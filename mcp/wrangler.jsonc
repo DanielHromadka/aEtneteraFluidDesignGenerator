@@ -1,0 +1,10 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "boldnewera-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "browser": { "binding": "BROWSER" },
+  "vars": { "SITE_URL": "https://boldnewera.pages.dev/" }
+  // secret: MCP_TOKEN (wrangler secret put MCP_TOKEN)
+}

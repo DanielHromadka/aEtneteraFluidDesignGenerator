@@ -106,6 +106,14 @@
   input[type=range] { width: 100%; accent-color: var(--lime); margin: 0; }
   .tune .row { margin-top: 10px; }
   .tune button { margin-top: 14px; width: 100%; padding: 8px; font-size: 13px; }
+  .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .swatch { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; margin: 0; text-transform: lowercase; }
+  input[type=color] { width: 100%; height: 34px; padding: 2px; background: #0f1115; border: 1px solid var(--line); border-radius: 8px; }
+  input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type=color]::-webkit-color-swatch { border: 0; border-radius: 6px; }
+  .swatch.changed { color: var(--text); }
+  .swatch.changed::after { content: "•"; color: var(--lime); margin-top: -4px; }
+  .hidden { display: none !important; }
   details pre { font: 11px/1.5 "JetBrains Mono", monospace; white-space: pre-wrap; margin: 8px 0 0; }
   main {
     display: grid;
@@ -185,14 +193,63 @@ era</textarea>
           <option value="16:9">16:9 slide</option>
         </select>
       </div>
-      <div>
-        <label for="textColor">barva textu</label>
-        <select id="textColor">
-          <option value="auto">auto</option>
-          <option value="lime">limetková</option>
-          <option value="white">bílá</option>
-          <option value="dark">tmavá</option>
-        </select>
+    </div>
+
+    <div id="textBox">
+      <div class="row">
+        <div>
+          <label for="font">font</label>
+          <select id="font">
+            <option>Outfit</option>
+            <option>Space Grotesk</option>
+            <option>Inter Tight</option>
+            <option>Manrope</option>
+            <option>Sora</option>
+            <option>DM Sans</option>
+            <option>Archivo</option>
+            <option>Bricolage Grotesque</option>
+            <option>Unbounded</option>
+            <option>Syne</option>
+            <option>Montserrat</option>
+            <option>Playfair Display</option>
+            <option>JetBrains Mono</option>
+          </select>
+        </div>
+        <div>
+          <label for="textColor">barva textu</label>
+          <select id="textColor">
+            <option value="auto">auto</option>
+            <option value="accent">akcent pozadí</option>
+            <option value="white">bílá</option>
+            <option value="dark">tmavá</option>
+            <option value="custom">vlastní…</option>
+          </select>
+        </div>
+      </div>
+      <div class="swatches" id="textHexBox">
+        <label class="swatch">vlastní barva textu<input id="textHex" type="color" value="#ffffff"></label>
+      </div>
+    </div>
+
+    <div id="paletteBox">
+      <div class="row">
+        <div>
+          <label for="palette">paleta</label>
+          <select id="palette">
+            <option value="">z hashe (lime / lavender)</option>
+            <option value="ff7a1a,e04a8a,2a0f1f">sunset</option>
+            <option value="2de2e6,3a6df0,0b1630">ocean</option>
+            <option value="39f2a0,9aa6b8,121820">mint</option>
+            <option value="c58bff,5b5bd6,160f2a">violet</option>
+            <option value="ff3b3b,f0b7a4,1d1214">red</option>
+            <option value="f2f2f2,8a8f99,111316">mono</option>
+          </select>
+        </div>
+      </div>
+      <div class="swatches">
+        <label class="swatch" data-c="accent">akcent<input id="cAccent" type="color"></label>
+        <label class="swatch" data-c="second">sekundární<input id="cSecond" type="color"></label>
+        <label class="swatch" data-c="dark">tmavá<input id="cDark" type="color"></label>
       </div>
     </div>
     <div id="sliders"></div>
@@ -232,9 +289,12 @@ uniform float uMode, uT1, uT2, uFLo, uFHi, uSpec, uBump, uOct;
 uniform vec3  uCLime, uCLimeHi, uCLav, uCLavHi, uCDark, uCSlate;
 uniform vec3  uLight;
 
+// sin-free hash (Dave Hoskins): identical on every GPU, so the same
+// SHA-256 gives the same poster everywhere
 vec2 grad(vec2 p) {
-  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yzx + 33.33);
+  return -1.0 + 2.0 * fract((p3.xx + p3.yz) * p3.zy);
 }
 float noise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
@@ -407,6 +467,8 @@ function paramsFromHash(bytes) {
 
 // ---------- manual controls ----------
 const SLIDERS = [
+  { group: 'text', box: 'textBox' },
+  { key: 'textSize', label: 'velikost textu', min: 0.4, max: 1.8, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
   { group: 'tvar' },
   { key: 'variation', label: 'variace', min: 0, max: 100, step: 1, fmt: v => v },
   { key: 'scale', label: 'zoom', min: 0.4, max: 2.6, step: 0.01, fmt: v => v.toFixed(2) },
@@ -414,27 +476,37 @@ const SLIDERS = [
   { key: 'angle', label: 'směr proudění', min: 0, max: Math.PI, step: 0.01, fmt: v => Math.round(v * 180 / Math.PI) + '°' },
   { key: 'aniso', label: 'víry ↔ pruhy', min: 1, max: 5, step: 0.05, fmt: v => v.toFixed(2) },
   { key: 'oct', label: 'detail', min: 2, max: 6, step: 1, fmt: v => v },
-  { group: 'barvy' },
-  { key: 'limeFrac', label: 'limetka', min: 0.1, max: 0.75, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
+  { group: 'barvy', box: 'paletteBox' },
+  { key: 'limeFrac', label: 'podíl akcentu', min: 0.1, max: 0.75, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
   { key: 'darkFrac', label: 'tmavý pás', min: 0, max: 0.35, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
-  { key: 'limeT', label: 'odstín limetky', min: 0, max: 1, step: 0.01, fmt: v => v < 0.5 ? 'zelenější' : 'žlutější' },
-  { key: 'lavT', label: 'odstín levandule', min: 0, max: 1, step: 0.01, fmt: v => v < 0.5 ? 'modřejší' : 'fialovější' },
+  { key: 'limeT', label: 'odstín akcentu (hash)', min: 0, max: 1, step: 0.01, fmt: v => v < 0.5 ? 'zelenější' : 'žlutější' },
+  { key: 'lavT', label: 'odstín sekundární (hash)', min: 0, max: 1, step: 0.01, fmt: v => v < 0.5 ? 'modřejší' : 'fialovější' },
   { group: 'světlo' },
   { key: 'spec', label: 'lesk', min: 0, max: 1.6, step: 0.01, fmt: v => v.toFixed(2) },
   { key: 'bump', label: 'reliéf', min: 0, max: 0.16, step: 0.002, fmt: v => v.toFixed(3) },
   { key: 'lightDeg', label: 'směr světla', min: 0, max: 360, step: 1, fmt: v => Math.round(v) + '°' },
   { group: 'ostatní' },
-  { key: 'textSize', label: 'velikost textu', min: 0.5, max: 1.5, step: 0.01, fmt: v => Math.round(v * 100) + ' %' },
   { key: 'speed', label: 'rychlost animace', min: 0.1, max: 4, step: 0.05, fmt: v => v.toFixed(2) + '×' },
 ];
 let BASE = null;
 const overrides = {};
+const COLORS = { accent: null, second: null, dark: null };
+const toHex = c => '#' + c.map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
+
+function syncColors() {
+  $('cAccent').value = toHex(P.lime_c);
+  $('cSecond').value = toHex(P.lav);
+  $('cDark').value = toHex(P.darkC);
+  for (const el of document.querySelectorAll('.swatch[data-c]')) el.classList.toggle('changed', !!COLORS[el.dataset.c]);
+  $('textHexBox').classList.toggle('hidden', $('textColor').value !== 'custom');
+}
 
 function buildSliders() {
   const root = $('sliders');
   for (const d of SLIDERS) {
     if (d.group) {
       root.insertAdjacentHTML('beforeend', `<div class="group">${d.group}</div>`);
+      if (d.box) root.appendChild($(d.box));
       continue;
     }
     const el = document.createElement('div');
@@ -469,6 +541,13 @@ function applyControls() {
   P.lav = lerp3(hex('#8790d4'), hex('#9a8ccf'), P.lavT);
   P.lavHi = lerp3(hex('#c3c8f4'), hex('#d0c4f2'), P.lavT);
   P.lime_c = lerp3(hex('#b4e000'), hex('#e0f530'), P.limeT);
+  // custom palette colours replace the hash tints
+  const W1 = [1, 1, 1];
+  if (COLORS.accent) { P.lime_c = hex(COLORS.accent); P.limeHi = lerp3(P.lime_c, W1, 0.5); }
+  if (COLORS.dark) P.darkC = hex(COLORS.dark);
+  if (COLORS.second) { P.lav = hex(COLORS.second); P.lavHi = lerp3(P.lav, W1, 0.5); }
+  if (COLORS.second || COLORS.dark) P.slate = lerp3(P.lav, P.darkC, 0.6);
+  syncColors();
   const la = P.lightDeg * Math.PI / 180;
   P.light = [Math.cos(la) * 0.6, Math.sin(la) * 0.6, 0.75];
   syncSliders();
@@ -550,12 +629,14 @@ const $ = id => document.getElementById(id);
 const BRAND = 'etnetera';
 const LIME = '#d4f21a', WHITE = '#eef0e8', DARK = '#1c1f28';
 
+const font = (weight, px) => `${weight} ${px}px "${$('font').value}", Outfit, sans-serif`;
+
 function fitFont(c, text, weight, maxW, startPx) {
   let px = startPx;
-  c.font = `${weight} ${px}px Outfit`;
+  c.font = font(weight, px);
   const w = c.measureText(text).width;
   if (w > maxW) px *= maxW / w;
-  c.font = `${weight} ${px}px Outfit`;
+  c.font = font(weight, px);
   return px;
 }
 
@@ -567,9 +648,10 @@ function drawTypography(c, W, H) {
   const S = Math.min(W, H / 1.5);
   const ts = P.textSize;
   const m = S * 0.065;
-  const pick = { lime: LIME, white: WHITE, dark: DARK }[$('textColor').value];
-  const main = pick || (layout === 'stacked' ? WHITE : LIME);
-  const accent = pick || LIME;
+  const accentText = COLORS.accent || LIME;
+  const pick = { accent: accentText, white: WHITE, dark: DARK, custom: $('textHex').value }[$('textColor').value];
+  const main = pick || (layout === 'stacked' ? WHITE : accentText);
+  const accent = pick || accentText;
   c.textBaseline = 'alphabetic';
 
   if (layout === 'vertical') {
@@ -578,7 +660,7 @@ function drawTypography(c, W, H) {
     const px = fitFont(c, brand, 500, H * 0.66 * ts, S * 0.24 * ts);
     c.translate(W * 0.47 + px * 0.36, H / 2 + Math.min(H * 0.36, c.measureText(brand).width / 2));
     c.rotate(-Math.PI / 2);
-    if (main !== DARK) { c.shadowColor = 'rgba(20, 22, 30, 0.45)'; c.shadowBlur = px * 0.25; }
+    if (main !== DARK && $('textColor').value !== 'custom') { c.shadowColor = 'rgba(20, 22, 30, 0.45)'; c.shadowBlur = px * 0.25; }
     c.fillText(brand, 0, 0);
     c.restore();
   }
@@ -587,10 +669,10 @@ function drawTypography(c, W, H) {
     const lines = $('headline').value.split('\n').map(s => s.trim()).filter(Boolean);
     c.fillStyle = main;
     let px = S * 0.24 * ts;
-    c.font = `700 ${px}px Outfit`;
+    c.font = font(700, px);
     const widest = Math.max(1, ...lines.map(l => c.measureText(l).width));
     if (widest > W * 0.72) px *= (W * 0.72) / widest;
-    c.font = `700 ${px}px Outfit`;
+    c.font = font(700, px);
     c.letterSpacing = `${-px * 0.03}px`;
     const x = Math.max(W * 0.15, (W - widest * px / (S * 0.24 * ts)) / 2 - W * 0.1 * (W > H));
     let y = H * 0.42 - (lines.length - 2) * px * 0.42;
@@ -606,22 +688,22 @@ function drawTypography(c, W, H) {
   if (layout === 'stacked') {
     c.fillStyle = main;
     const px = S * 0.038;
-    c.font = `500 ${px * 1.4}px Outfit`;
+    c.font = font(500, px * 1.4);
     const ampW = c.measureText('&').width;
-    c.font = `500 ${px}px Outfit`;
+    c.font = font(500, px);
     const bw = c.measureText(brand).width;
     const total = ampW + px * 0.25 + bw;
     const x0 = (W - total) / 2, y0 = H - m * 1.2;
-    c.font = `500 ${px * 1.4}px Outfit`;
+    c.font = font(500, px * 1.4);
     c.fillText('&', x0, y0 + px * 0.12);
-    c.font = `500 ${px}px Outfit`;
+    c.font = font(500, px);
     c.fillText(brand, x0 + ampW + px * 0.25, y0);
   } else {
     c.fillStyle = accent;
-    c.font = `500 ${S * 0.06}px Outfit`;
+    c.font = font(500, S * 0.06);
     c.fillText('&', m, H - m);
     if (tagline) {
-      c.font = `700 ${S * 0.026}px Outfit`;
+      c.font = font(700, S * 0.026);
       c.textAlign = 'right';
       c.fillText(tagline, W - m, H - m);
       c.textAlign = 'left';
@@ -744,9 +826,37 @@ $('export').addEventListener('click', () => {
   draw();
 });
 $('format').addEventListener('input', draw);
-$('textColor').addEventListener('input', draw);
+$('textColor').addEventListener('input', () => { syncColors(); draw(); });
+$('textHex').addEventListener('input', () => { $('textColor').value = 'custom'; draw(); });
+
+// fonts are loaded from Google Fonts on demand
+const loadedFonts = new Set(['Outfit', 'JetBrains Mono']);
+async function ensureFont(name) {
+  if (!loadedFonts.has(name)) {
+    loadedFonts.add(name);
+    const l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name).replace(/%20/g, '+')}:wght@300;400;500;700&display=swap`;
+    document.head.appendChild(l);
+    await new Promise(r => { l.onload = r; l.onerror = r; });
+  }
+  await Promise.all([300, 500, 700].map(w => document.fonts.load(`${w} 40px "${name}"`))).catch(() => {});
+}
+$('font').addEventListener('input', async () => { await ensureFont($('font').value); draw(); });
+
+for (const [id, key] of [['cAccent', 'accent'], ['cSecond', 'second'], ['cDark', 'dark']]) {
+  $(id).addEventListener('input', () => { COLORS[key] = $(id).value; applyControls(); draw(); });
+}
+$('palette').addEventListener('input', () => {
+  const v = $('palette').value;
+  [COLORS.accent, COLORS.second, COLORS.dark] = v ? v.split(',').map(h => '#' + h) : [null, null, null];
+  applyControls();
+  draw();
+});
 $('resetTune').addEventListener('click', () => {
   for (const k in overrides) delete overrides[k];
+  COLORS.accent = COLORS.second = COLORS.dark = null;
+  $('palette').value = '';
   applyControls();
   draw();
 });
@@ -758,11 +868,15 @@ window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(draw
 // ---------- URL state (shareable links, used by the MCP server) ----------
 // ?seed=text | ?sha=<64 hex>, layout, format, headline, tagline, textColor, showHash=1,
 // plus any slider key (scale, warp, limeFrac, ...).
-const FIELDS = ['layout', 'format', 'headline', 'tagline', 'textColor'];
+const FIELDS = ['layout', 'format', 'headline', 'tagline', 'textColor', 'font'];
+const HEXES = { cAccent: 'accent', cSecond: 'second', cDark: 'dark' };
+const isHex = v => /^#?[0-9a-f]{6}$/i.test(v || '');
 
 function applyQuery(q) {
   for (const f of FIELDS) if (q.has(f)) $(f).value = q.get(f);
   if (q.has('showHash')) $('showHash').checked = q.get('showHash') === '1';
+  for (const k in HEXES) if (isHex(q.get(k))) COLORS[HEXES[k]] = '#' + q.get(k).replace('#', '');
+  if (isHex(q.get('textHex'))) { $('textHex').value = '#' + q.get('textHex').replace('#', ''); if (!q.has('textColor')) $('textColor').value = 'custom'; }
   for (const d of SLIDERS) {
     if (d.key && q.has(d.key) && Number.isFinite(+q.get(d.key))) overrides[d.key] = +q.get(d.key);
   }
@@ -775,6 +889,8 @@ function shareUrl() {
   for (const f of FIELDS) q.set(f, $(f).value);
   if ($('showHash').checked) q.set('showHash', '1');
   for (const k in overrides) q.set(k, +(+overrides[k]).toFixed(4));
+  for (const k in HEXES) if (COLORS[HEXES[k]]) q.set(k, COLORS[HEXES[k]].slice(1));
+  if ($('textColor').value === 'custom') q.set('textHex', $('textHex').value.slice(1));
   return `${location.origin}${location.pathname}?${q}`;
 }
 
@@ -786,11 +902,11 @@ $('share').addEventListener('click', async () => {
   setTimeout(() => { $('share').textContent = 'Kopírovat odkaz'; }, 1600);
 });
 
-// headless API: returns a PNG data URL of the poster with the longer side = `long`
-window.renderPosterPNG = (long = 1800) => {
+// headless API: data URL of the poster with the longer side = `long`
+window.renderPoster = (long = 1800, mime = 'image/png', quality = 0.92) => {
   const ar = aspect(), out = document.createElement('canvas');
   compose(out, Math.round(ar >= 1 ? long : long * ar), Math.round(ar >= 1 ? long / ar : long), time);
-  return out.toDataURL('image/png');
+  return out.toDataURL(mime, quality);
 };
 window.posterInfo = () => ({ sha256: hashHex, webgl: !!gl, params: P, share: shareUrl() });
 
@@ -798,9 +914,10 @@ window.posterInfo = () => ({ sha256: hashHex, webgl: !!gl, params: P, share: sha
 Promise.all([
   document.fonts.load('300 40px Outfit'), document.fonts.load('500 40px Outfit'),
   document.fonts.load('700 40px Outfit'), document.fonts.load('400 20px "JetBrains Mono"'),
-]).catch(() => {}).finally(() => {
+]).catch(() => {}).finally(async () => {
   const q = new URLSearchParams(location.search);
   applyQuery(q);
+  await ensureFont($('font').value);
   const sha = (q.get('sha') || '').toLowerCase();
   if (/^[0-9a-f]{64}$/.test(sha)) {
     $('seedText').value = '';
@@ -808,7 +925,7 @@ Promise.all([
   } else {
     if (q.has('seed')) $('seedText').value = q.get('seed');
     else if (location.hash.length > 1) $('seedText').value = decodeURIComponent(location.hash.slice(1));
-    useBytes(new TextEncoder().encode($('seedText').value), '');
+    await useBytes(new TextEncoder().encode($('seedText').value), '');
   }
   window.posterReady = true;
 });
